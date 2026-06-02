@@ -15,6 +15,8 @@ class PathsConfig(BaseModel):
     qwenasr_cli: Path
     omnivoice_python: Path
     skills_dir: Path
+    # Legacy only: historical Hermes subtitle-translation script path.
+    # Standalone CLI translation now uses `translation.provider/model`.
     translation_skill: Path
     dub_root: Path = Field(default_factory=lambda: Path.home() / ".hermes")
 
@@ -24,6 +26,8 @@ class TranslationConfig(BaseModel):
     model: str = "gemini-2.5-flash"
     api_env_var: str = "GOOGLE_API_KEY"
     temperature: float = 0.2
+    mode: str = "delegate"
+    translated_srt: Path | None = None
 
 
 class DefaultsConfig(BaseModel):
@@ -68,6 +72,8 @@ class DubConfig(BaseModel):
         vocal_gain: float | None = None,
         inst_gain: float | None = None,
         keep_fulltrack: bool | None = None,
+        translate_mode: str | None = None,
+        translated_srt: Path | None = None,
     ) -> "DubConfig":
         cfg = self.model_copy(deep=True)
         if source_lang is not None:
@@ -80,6 +86,10 @@ class DubConfig(BaseModel):
             cfg.defaults.inst_gain = inst_gain
         if keep_fulltrack is not None:
             cfg.defaults.keep_fulltrack = keep_fulltrack
+        if translate_mode is not None:
+            cfg.translation.mode = translate_mode
+        if translated_srt is not None:
+            cfg.translation.translated_srt = translated_srt
         return cfg
 
 

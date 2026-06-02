@@ -29,6 +29,17 @@ def _bootstrap_state(project_dir: Path, cfg) -> None:
     state.input["video_path"] = info["video_path"]
     state.input["video_sha256"] = info["video_sha256"]
     state.input["duration_sec"] = info["duration_sec"]
+    state.input["translate_mode"] = cfg.translation.mode
+    state.input["translated_srt"] = str(cfg.translation.translated_srt) if cfg.translation.translated_srt else None
+    save_state(project_dir, state)
+
+
+def _refresh_runtime_input_state(project_dir: Path, cfg) -> None:
+    state = load_state(project_dir)
+    state.input["source_lang"] = cfg.defaults.source_lang
+    state.input["target_lang"] = cfg.defaults.target_lang
+    state.input["translate_mode"] = cfg.translation.mode
+    state.input["translated_srt"] = str(cfg.translation.translated_srt) if cfg.translation.translated_srt else None
     save_state(project_dir, state)
 
 
@@ -66,9 +77,12 @@ def run(video, source_lang, target_lang, project_dir, config_path,
         vocal_gain=vocal_gain,
         inst_gain=inst_gain,
         keep_fulltrack=keep_fulltrack,
+        translate_mode=translate_mode,
+        translated_srt=translated_srt,
     )
     pdir = _prepare_project(video, str(project_dir) if project_dir else None, cfg)
     _bootstrap_state(pdir, cfg)
+    _refresh_runtime_input_state(pdir, cfg)
     run_pipeline(pdir, cfg, yes=yes)
     click.echo(f"run complete: project={pdir}")
 

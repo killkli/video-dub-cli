@@ -67,6 +67,8 @@ def new_state(project_dir: Path, config: DubConfig) -> ProjectState:
             "duration_sec": 0.0,
             "source_lang": config.defaults.source_lang,
             "target_lang": config.defaults.target_lang,
+            "translate_mode": config.translation.mode,
+            "translated_srt": str(config.translation.translated_srt) if config.translation.translated_srt else None,
         },
         stages=stages,
         config_snapshot={},
