@@ -63,6 +63,28 @@ def _validate_run_contract(project_dir: Path, cfg) -> None:
         )
 
 
+def _preflight_route_summary(project_dir: Path, cfg) -> str:
+    mode = cfg.translation.mode
+    translated_srt = cfg.translation.translated_srt
+    project_translated_srt = project_dir / "05_translated_srt" / "video.zhtw.srt"
+
+    if mode == "delegate":
+        route = "translate=delegate (committed provider route)"
+    elif mode == "use-existing":
+        route = f"translate=use-existing external_srt={translated_srt}"
+    else:
+        route = f"translate=skip existing_project_srt={project_translated_srt}"
+
+    return (
+        "preflight: "
+        f"src={cfg.defaults.source_lang} "
+        f"tgt={cfg.defaults.target_lang} "
+        f"project={project_dir} "
+        f"mode={mode} "
+        f"route={route}"
+    )
+
+
 @click.group()
 @click.version_option()
 def main():
@@ -103,6 +125,7 @@ def run(video, source_lang, target_lang, project_dir, config_path,
         )
         pdir = _prepare_project(video, str(project_dir) if project_dir else None, cfg)
         _validate_run_contract(pdir, cfg)
+        click.echo(_preflight_route_summary(pdir, cfg))
         _bootstrap_state(pdir, cfg)
         _refresh_runtime_input_state(pdir, cfg)
         run_pipeline(pdir, cfg, yes=yes)
