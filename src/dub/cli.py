@@ -6,6 +6,7 @@ from pathlib import Path
 import click
 
 from dub.config import load_config
+from dub.errors import UserError
 from dub.project import STAGE_DIRS, create_project, initialize_project, project_input_info
 from dub.runner import run_pipeline
 from dub.state import load_state, new_state, save_state
@@ -43,6 +44,25 @@ def _refresh_runtime_input_state(project_dir: Path, cfg) -> None:
     save_state(project_dir, state)
 
 
+def _validate_run_contract(project_dir: Path, cfg) -> None:
+    mode = cfg.translation.mode
+    translated_srt = cfg.translation.translated_srt
+    project_translated_srt = project_dir / "05_translated_srt" / "video.zhtw.srt"
+
+    if mode == "use-existing":
+        if translated_srt is None:
+            raise UserError("translate-mode=use-existing requires --translated-srt")
+        if not translated_srt.exists():
+            raise UserError(f"translated SRT not found: {translated_srt}")
+
+    if mode == "skip" and not project_translated_srt.exists():
+        raise UserError(
+            "translate-mode=skip requires an existing translated subtitle at "
+            f"{project_translated_srt}. Use --translate-mode use-existing --translated-srt <path> "
+            "for a fresh run, or re-run on an existing project that already has translated subtitles."
+        )
+
+
 @click.group()
 @click.version_option()
 def main():
@@ -70,20 +90,24 @@ def run(video, source_lang, target_lang, project_dir, config_path,
         translate_mode, translated_srt, vocal_gain, inst_gain,
         keep_fulltrack, yes):
     """Run full dubbing pipeline. VIDEO is the source mp4 path."""
-    cfg = load_config(config_path)
-    cfg = cfg.merge_cli_overrides(
-        source_lang=source_lang,
-        target_lang=target_lang,
-        vocal_gain=vocal_gain,
-        inst_gain=inst_gain,
-        keep_fulltrack=keep_fulltrack,
-        translate_mode=translate_mode,
-        translated_srt=translated_srt,
-    )
-    pdir = _prepare_project(video, str(project_dir) if project_dir else None, cfg)
-    _bootstrap_state(pdir, cfg)
-    _refresh_runtime_input_state(pdir, cfg)
-    run_pipeline(pdir, cfg, yes=yes)
+    try:
+        cfg = load_config(config_path)
+        cfg = cfg.merge_cli_overrides(
+            source_lang=source_lang,
+            target_lang=target_lang,
+            vocal_gain=vocal_gain,
+            inst_gain=inst_gain,
+            keep_fulltrack=keep_fulltrack,
+            translate_mode=translate_mode,
+            translated_srt=translated_srt,
+        )
+        pdir = _prepare_project(video, str(project_dir) if project_dir else None, cfg)
+        _validate_run_contract(pdir, cfg)
+        _bootstrap_state(pdir, cfg)
+        _refresh_runtime_input_state(pdir, cfg)
+        run_pipeline(pdir, cfg, yes=yes)
+    except UserError as exc:
+        raise click.ClickException(str(exc)) from exc
     click.echo(f"run complete: project={pdir}")
 
 
