@@ -221,6 +221,43 @@ def test_dub_run_persists_translate_mode_and_translated_srt(runner, tmp_path, mo
     assert state.input["translated_srt"] == str(translated)
 
 
+def test_dub_resume_restores_source_lang_from_state(runner, tmp_path, monkeypatch):
+    project_dir = tmp_path / "proj"
+    (project_dir / "01_raw_video").mkdir(parents=True)
+    (project_dir / ".dub").mkdir(parents=True)
+    (project_dir / "01_raw_video" / "video.mp4").write_bytes(b"fake")
+    save_state(project_dir, {
+        "project_id": project_dir.name,
+        "input": {
+            "video_path": str(project_dir / "01_raw_video" / "video.mp4"),
+            "video_sha256": "abc",
+            "duration_sec": 1.23,
+            "source_lang": "ja",
+            "target_lang": "zh",
+            "translate_mode": "delegate",
+            "translated_srt": None,
+        },
+        "stages": {},
+    })
+
+    seen = {}
+
+    def fake_run_pipeline(project_dir_arg, cfg, yes=False):
+        seen["source_lang"] = cfg.defaults.source_lang
+        seen["target_lang"] = cfg.defaults.target_lang
+        seen["translate_mode"] = cfg.translation.mode
+        return {"ok": True}
+
+    monkeypatch.setattr("dub.cli.run_pipeline", fake_run_pipeline)
+
+    result = runner.invoke(main, ["resume", "--project-dir", str(project_dir)])
+
+    assert result.exit_code == 0, result.output
+    assert seen["source_lang"] == "ja"
+    assert seen["target_lang"] == "zh"
+    assert seen["translate_mode"] == "delegate"
+
+
 def test_dub_run_skip_succeeds_when_project_already_has_translated_srt(runner, tmp_path, monkeypatch):
     video = tmp_path / "video.mp4"
     video.write_bytes(b"fake")

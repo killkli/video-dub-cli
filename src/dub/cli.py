@@ -44,6 +44,21 @@ def _refresh_runtime_input_state(project_dir: Path, cfg) -> None:
     save_state(project_dir, state)
 
 
+def _restore_cfg_from_state_inputs(project_dir: Path, cfg):
+    state = load_state(project_dir)
+    source_lang = state.input.get("source_lang")
+    target_lang = state.input.get("target_lang")
+    translate_mode = state.input.get("translate_mode")
+    translated_srt_raw = state.input.get("translated_srt")
+    translated_srt = Path(translated_srt_raw) if translated_srt_raw else None
+    return cfg.merge_cli_overrides(
+        source_lang=source_lang,
+        target_lang=target_lang,
+        translate_mode=translate_mode,
+        translated_srt=translated_srt,
+    )
+
+
 def _validate_run_contract(project_dir: Path, cfg) -> None:
     mode = cfg.translation.mode
     translated_srt = cfg.translation.translated_srt
@@ -145,6 +160,8 @@ def resume_cmd(project_dir, config_path):
         click.echo(f"resume: project={project_dir} (no source video)")
         return
     _bootstrap_state(project_dir, cfg)
+    cfg = _restore_cfg_from_state_inputs(project_dir, cfg)
+    _refresh_runtime_input_state(project_dir, cfg)
     run_pipeline(project_dir, cfg, yes=True)
     click.echo(f"resume complete: project={project_dir}")
 
