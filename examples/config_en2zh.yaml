@@ -1,5 +1,5 @@
-# English to Chinese dub config
-# Copy to ~/.config/dub/config.yaml or pass via --config
+# Example config: English to Chinese (Simplified)
+# Usage: cp config_en2zh.yaml ~/.config/dub/config.yaml, then edit paths
 
 paths:
   qwenasr_cli: /path/to/qwenasr-mlx
@@ -17,7 +17,7 @@ defaults:
 
 retry:
   max_attempts: 3
-  backoff_seconds: 5.0
+  backoff_seconds: 5
   retry_on:
     - subprocess.CalledProcessError
     - TimeoutError

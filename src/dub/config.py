@@ -1,107 +1,136 @@
-"""Configuration schema for video-dub-cli."""
+"""config.py — YAML config loading + CLI override merging."""
+
 from __future__ import annotations
 
+import copy
 from pathlib import Path
-from typing import Literal, Optional, Union
+from typing import Any
 
-from pydantic import BaseModel, Field
+import yaml
+
+from dub.errors import ConfigError
 
 
-class PathsConfig(BaseModel):
-    """Required paths for the dub pipeline."""
+# ── schema ────────────────────────────────────────────────────────────────────
 
-    qwenasr_cli: Path
-    omnivoice_python: Path
-    skills_dir: Path
+class Paths:
+    qwenasr_cli: Path = Path("/path/to/qwenasr-mlx")
+    omnivoice_python: Path = Path("/path/to/omnivoice-python")
+    skills_dir: Path = Path("/path/to/video-dubbing-pipeline/scripts")
     dub_root: Path = Path("~/.hermes").expanduser()
-    translation_skill: Path
+    translation_skill: Path = Path("/path/to/subtitle_translation.py")
+
+    def __init__(self, d: dict[str, Any] | None = None) -> None:
+        if d:
+            self.qwenasr_cli = Path(d.get("qwenasr_cli", self.qwenasr_cli))
+            self.omnivoice_python = Path(d.get("omnivoice_python", self.omnivoice_python))
+            self.skills_dir = Path(d.get("skills_dir", self.skills_dir))
+            self.dub_root = Path(d.get("dub_root", self.dub_root)).expanduser()
+            self.translation_skill = Path(d.get("translation_skill", self.translation_skill))
 
 
-class DefaultsConfig(BaseModel):
-    """Default pipeline parameters."""
-
-    source_lang: Literal["en", "ja", "zh"] = "en"
-    target_lang: Literal["zh", "en"] = "zh"
+class Defaults:
+    source_lang: str = "en"
+    target_lang: str = "zh"
     vocal_gain: float = 3.0
     inst_gain: float = -3.0
     keep_fulltrack: bool = False
 
+    def __init__(self, d: dict[str, Any] | None = None) -> None:
+        if d:
+            self.source_lang = d.get("source_lang", self.source_lang)
+            self.target_lang = d.get("target_lang", self.target_lang)
+            self.vocal_gain = float(d.get("vocal_gain", self.vocal_gain))
+            self.inst_gain = float(d.get("inst_gain", self.inst_gain))
+            self.keep_fulltrack = bool(d.get("keep_fulltrack", self.keep_fulltrack))
 
-class RetryConfig(BaseModel):
-    """Retry policy for failed subprocess calls."""
 
-    max_attempts: int = Field(3, ge=1, le=10)
+class RetryConfig:
+    max_attempts: int = 3
     backoff_seconds: float = 5.0
-    retry_on: list[str] = [
-        "subprocess.CalledProcessError",
-        "TimeoutError",
-        "ConnectionError",
-    ]
+    retry_on: list[str] = ["subprocess.CalledProcessError", "TimeoutError", "ConnectionError"]
+
+    def __init__(self, d: dict[str, Any] | None = None) -> None:
+        if d:
+            self.max_attempts = int(d.get("max_attempts", self.max_attempts))
+            self.backoff_seconds = float(d.get("backoff_seconds", self.backoff_seconds))
+            self.retry_on = list(d.get("retry_on", self.retry_on))
 
 
-class LoggingConfig(BaseModel):
-    """Logging configuration."""
-
-    level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+class LoggingConfig:
+    level: str = "INFO"
     json_logs: bool = False
-    file: Optional[Path] = None
-    progress: Literal["rich", "plain", "none"] = "rich"
+    file: str = "<project>/.dub/log.txt"
+    progress: str = "rich"
+
+    def __init__(self, d: dict[str, Any] | None = None) -> None:
+        if d:
+            self.level = d.get("level", self.level)
+            self.json_logs = bool(d.get("json_logs", self.json_logs))
+            self.file = str(d.get("file", self.file))
+            self.progress = d.get("progress", self.progress)
 
 
-class DubConfig(BaseModel):
-    """Root configuration object."""
-
-    paths: PathsConfig
-    defaults: DefaultsConfig = DefaultsConfig()
+class DubConfig:
+    paths: Paths = Paths()
+    defaults: Defaults = Defaults()
     retry: RetryConfig = RetryConfig()
     logging: LoggingConfig = LoggingConfig()
 
+    def __init__(self, d: dict[str, Any] | None = None) -> None:
+        if d:
+            self.paths = Paths(d.get("paths"))
+            self.defaults = Defaults(d.get("defaults"))
+            self.retry = RetryConfig(d.get("retry"))
+            self.logging = LoggingConfig(d.get("logging"))
 
-class UserError(Exception):
-    """Raised when configuration is invalid or user input is wrong."""
+    def merge_cli_overrides(
+        self,
+        *,
+        source_lang: str | None = None,
+        target_lang: str | None = None,
+        vocal_gain: float | None = None,
+        inst_gain: float | None = None,
+        keep_fulltrack: bool | None = None,
+    ) -> "DubConfig":
+        """Return a new config with CLI flags overlaid."""
+        cfg = copy.deepcopy(self)
+        if source_lang is not None:
+            cfg.defaults.source_lang = source_lang
+        if target_lang is not None:
+            cfg.defaults.target_lang = target_lang
+        if vocal_gain is not None:
+            cfg.defaults.vocal_gain = vocal_gain
+        if inst_gain is not None:
+            cfg.defaults.inst_gain = inst_gain
+        if keep_fulltrack is not None:
+            cfg.defaults.keep_fulltrack = keep_fulltrack
+        return cfg
 
-    pass
 
+# ── loader ────────────────────────────────────────────────────────────────────
 
-def load_config(path: Optional[Path] = None) -> DubConfig:
+def load_config(path: Path | str | None = None) -> DubConfig:
     """
-    Load configuration.
-
-    Priority (high → low):
-    1. ``path`` argument
-    2. ~/.config/dub/config.yaml
-    3. built-in defaults
-
-    Raises UserError if ``paths`` section is missing.
+    Load config from path (default ~/.config/dub/config.yaml).
+    Return default DubConfig if file is absent.
     """
-    import yaml
+    default_locations = [Path("~/.config/dub/config.yaml").expanduser()]
+    search = []
+    if path:
+        search = [Path(path)]
+    search += default_locations
 
-    base = Path.home() / ".config" / "dub" / "config.yaml"
+    for p in search:
+        if p.exists():
+            try:
+                with open(p) as f:
+                    raw = yaml.safe_load(f) or {}
+                return DubConfig(raw)
+            except yaml.YAMLError as e:
+                raise ConfigError(f"Invalid YAML in {p}: {e}") from e
 
-    defaults: dict = {}
-    if base.exists():
-        with open(base) as f:
-            defaults = yaml.safe_load(f) or {}
-
-    override: dict = {}
-    if path is not None and path.exists():
-        with open(path) as f:
-            override = yaml.safe_load(f) or {}
-
-    merged = _deep_merge(defaults, override)
-
-    if "paths" not in merged:
-        raise UserError("paths section required in configuration")
-
-    return DubConfig.model_validate(merged)
+    return DubConfig()
 
 
-def _deep_merge(base: dict, overlay: dict) -> dict:
-    """Deep-merge overlay into base, mutating base."""
-    result = base.copy()
-    for key, val in overlay.items():
-        if key in result and isinstance(result[key], dict) and isinstance(val, dict):
-            result[key] = _deep_merge(result[key], val)
-        else:
-            result[key] = val
-    return result
+__all__ = ["DubConfig", "load_config"]

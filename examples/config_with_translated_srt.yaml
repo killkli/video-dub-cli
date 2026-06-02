@@ -1,5 +1,7 @@
-# Use pre-existing translated SRT (skip translation stage)
-# Useful when you've already translated externally
+# Example config: Use an already-translated SRT (skip translation stage)
+# Usage: cp config_with_translated_srt.yaml ~/.config/dub/config.yaml, then edit paths
+# Then run: dub run video.mp4 --source-lang en --target-lang zh \
+#   --translate-mode use-existing --translated-srt /path/to/translated.srt
 
 paths:
   qwenasr_cli: /path/to/qwenasr-mlx
@@ -17,7 +19,7 @@ defaults:
 
 retry:
   max_attempts: 3
-  backoff_seconds: 5.0
+  backoff_seconds: 5
   retry_on:
     - subprocess.CalledProcessError
     - TimeoutError
@@ -28,4 +30,7 @@ logging:
   json_logs: false
   progress: rich
 
-# translate-mode: use-existing  # <- set via CLI flag: --translate-mode use-existing --translated-srt /path/to.srt
+# Example CLI usage with this config:
+#   dub run my_talk.mp4 --source-lang en --target-lang zh \
+#     --translate-mode use-existing \
+#     --translated-srt ~/Downloads/talk.zhtw.srt
