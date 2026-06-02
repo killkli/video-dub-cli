@@ -1,0 +1,30 @@
+# Example config: Japanese to Chinese (Traditional)
+# Usage: cp config_ja2zh.yaml ~/.config/dub/config.yaml, then edit paths
+# Note: ja uses VoxCPM TTS backend (not OmniVoice)
+
+paths:
+  qwenasr_cli: /path/to/qwenasr-mlx
+  omnivoice_python: /path/to/voxcpm-python   # VoxCPM for ja
+  skills_dir: /path/to/video-dubbing-pipeline/scripts
+  dub_root: ~/.hermes
+  translation_skill: /path/to/subtitle_translation.py
+
+defaults:
+  source_lang: ja
+  target_lang: zh
+  vocal_gain: 3.0
+  inst_gain: -3.0
+  keep_fulltrack: false
+
+retry:
+  max_attempts: 3
+  backoff_seconds: 5
+  retry_on:
+    - subprocess.CalledProcessError
+    - TimeoutError
+    - ConnectionError
+
+logging:
+  level: INFO
+  json_logs: false
+  progress: rich

@@ -1,0 +1,29 @@
+# Example config: English to Chinese (Simplified)
+# Usage: cp config_en2zh.yaml ~/.config/dub/config.yaml, then edit paths
+
+paths:
+  qwenasr_cli: /path/to/qwenasr-mlx
+  omnivoice_python: /path/to/omnivoice-python
+  skills_dir: /path/to/video-dubbing-pipeline/scripts
+  dub_root: ~/.hermes
+  translation_skill: /path/to/subtitle_translation.py
+
+defaults:
+  source_lang: en
+  target_lang: zh
+  vocal_gain: 3.0
+  inst_gain: -3.0
+  keep_fulltrack: false
+
+retry:
+  max_attempts: 3
+  backoff_seconds: 5
+  retry_on:
+    - subprocess.CalledProcessError
+    - TimeoutError
+    - ConnectionError
+
+logging:
+  level: INFO
+  json_logs: false
+  progress: rich
