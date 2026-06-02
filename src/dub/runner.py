@@ -91,6 +91,9 @@ def run_pipeline(
         if new_state.status == "done" and not new_state.finished_at:
             s.stages[stage.name].finished_at = now_iso()
         state_module.save_state(project_dir, s)
+        if new_state.status not in {"done", "skipped"}:
+            log.error(f"[{stage.name}] failed: {new_state.error or new_state.status}")
+            raise RuntimeError(new_state.error or f"{stage.name} returned status={new_state.status}")
         log.info(f"[{stage.name}] done")
 
     s.updated_at = now_iso()

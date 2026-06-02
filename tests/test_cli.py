@@ -30,6 +30,13 @@ def test_dub_resume_exits_zero(runner):
     assert result.exit_code == 0
 
 
+def test_dub_resume_accepts_config_flag(runner, tmp_path):
+    cfg = tmp_path / "cfg.yaml"
+    cfg.write_text("paths:\n  qwenasr_cli: /bin/true\n", encoding="utf-8")
+    result = runner.invoke(main, ["resume", "--project-dir", "/tmp", "--config", str(cfg)])
+    assert result.exit_code == 0
+
+
 def test_dub_status_exits_zero(runner):
     result = runner.invoke(main, ["status", "--project-dir", "/tmp"])
     assert result.exit_code == 0

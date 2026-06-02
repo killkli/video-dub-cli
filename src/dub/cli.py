@@ -75,9 +75,10 @@ def run(video, source_lang, target_lang, project_dir, config_path,
 
 @main.command(name="resume")
 @click.option("--project-dir", required=True, type=click.Path(exists=True, path_type=Path))
-def resume_cmd(project_dir):
+@click.option("--config", "config_path", type=click.Path(path_type=Path), default=None)
+def resume_cmd(project_dir, config_path):
     """Resume an interrupted pipeline from last successful stage."""
-    cfg = load_config(None)
+    cfg = load_config(config_path)
     project_dir.mkdir(parents=True, exist_ok=True)
     if not (project_dir / "01_raw_video" / "video.mp4").exists():
         click.echo(f"resume: project={project_dir} (no source video)")

@@ -24,7 +24,6 @@ class TranslateStage(Stage):
         src_srt = project_dir / "03_asr" / "video.srt"
         dst_srt = project_dir / "05_translated_srt" / "video.zhtw.srt"
 
-        # Load subtitle_translation.py as a module via spec_from_file_location
         script_path = config.paths.translation_skill
         spec = spec_from_file_location("subtitle_translation", script_path)
         if spec is None or spec.loader is None:
@@ -36,7 +35,6 @@ class TranslateStage(Stage):
         mod = module_from_spec(spec)
         spec.loader.exec_module(mod)
 
-        # Call translate_srt or whatever the entry point is
         translate_fn = getattr(mod, "translate_srt", None) or getattr(mod, "main", None)
         if translate_fn is None:
             state.status = "failed"
