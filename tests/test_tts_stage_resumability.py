@@ -391,3 +391,165 @@ def test_missing_tts_wavs_agrees_with_is_done(tmp_path):
     assert "line_1_tts.wav" not in missing
     assert "line_2_tts.wav" not in missing
     assert TtsStage().is_done(proj) is False
+
+
+# ── Second-half of the bug: the production failure mode ─────────────────
+# The original 22/32 incident on the real OmniVoice / MPS run had ten
+# cues where the file was *entirely absent* (model.generate raised mid-
+# synthesis and the atomic-write path never executed) — not a 0-byte
+# placeholder. Both shapes must be detected and recovered, because the
+# OmniVoice script's own "Done: 32 ok, 0 failed" line is computed from
+# tts_segment()'s return value and won't reflect an unhandled raise.
+
+
+def _make_partially_absent_run_subprocess(
+    proj: Path, total: int, missing_indices: set[int], call_log: list[list[str]]
+):
+    """Build a fake ``subprocess.run`` that mirrors the original real-run
+    22/32 bug: the initial run completely omits ``line_<i>_tts.wav`` for
+    each cue in ``missing_indices`` (no placeholder, no 0-byte file —
+    just nothing on disk). Per-line recovery calls always succeed.
+
+    The 0-byte-placeholder shape is covered by
+    ``_make_partial_run_subprocess`` above; this one is the "model
+    raised, file never existed" shape.
+    """
+
+    def _extract_idx(cmd: list[str]) -> int | None:
+        for j, tok in enumerate(cmd):
+            if tok == "--start" and j + 1 < len(cmd):
+                try:
+                    return int(cmd[j + 1])
+                except ValueError:
+                    return None
+        return None
+
+    def _is_recovery_call(cmd: list[str]) -> bool:
+        s = _extract_idx(cmd)
+        if s is None:
+            return False
+        for j, tok in enumerate(cmd):
+            if tok == "--end" and j + 1 < len(cmd):
+                try:
+                    return int(cmd[j + 1]) == s
+                except ValueError:
+                    return False
+        return False
+
+    def fake_run(cmd, stdout=None, stderr=None, text=None, check=None, **kwargs):
+        call_log.append(list(cmd))
+        out_dir = proj / "06_tts_wav"
+        if _is_recovery_call(cmd):
+            idx = _extract_idx(cmd)
+            assert idx is not None
+            (out_dir / f"line_{idx}_tts.wav").write_bytes(b"\x00" * 4096)
+            return _DummyResult(0)
+
+        # Initial run: leave missing lines COMPLETELY ABSENT.
+        for i in range(1, total + 1):
+            if i in missing_indices:
+                continue  # do not write anything at all for this cue
+            (out_dir / f"line_{i}_tts.wav").write_bytes(b"\x00" * 4096)
+        return _DummyResult(0)
+
+    return fake_run
+
+
+def test_stage_recovers_from_22_of_32_with_files_truly_absent(
+    tmp_path, monkeypatch
+):
+    """The other half of the 22/32 reproducer: missing files are TRULY
+    absent, not 0-byte placeholders. Mirrors the original OmniVoice / MPS
+    failure mode where ``model.generate()`` raised mid-synthesis and the
+    atomic write never executed. The stage's per-line recovery must fill
+    in the missing cues exactly the same way as for 0-byte placeholders.
+    """
+    total = 32
+    missing = {3, 7, 11, 12, 18, 19, 22, 24, 27, 30}
+    assert len(missing) == 10
+
+    proj = _make_project(tmp_path, cues=total)
+    cfg = _cfg_with_fake_script(tmp_path)
+    call_log: list[list[str]] = []
+    monkeypatch.setattr(
+        subprocess, "run",
+        _make_partially_absent_run_subprocess(proj, total, missing, call_log),
+    )
+
+    state = TtsStage().run(proj, cfg)
+
+    assert state.status == "done", (
+        f"expected recovered status=done, got {state.status!r} "
+        f"error={state.error!r}"
+    )
+    assert len(state.artifacts) == total, (
+        f"expected {total} artifacts, got {len(state.artifacts)}: "
+        f"{state.artifacts}"
+    )
+    # Confirm the absent-files are now real on disk (> _TTS_MIN_BYTES),
+    # not placeholders.
+    for idx in missing:
+        wav = proj / "06_tts_wav" / f"line_{idx}_tts.wav"
+        assert wav.exists()
+        assert wav.stat().st_size > _TTS_MIN_BYTES
+    # 1 initial call + 10 single-line recovery calls.
+    assert len(call_log) == 1 + len(missing)
+
+
+def test_stage_recovers_from_mixed_absent_and_zero_byte_artifacts(
+    tmp_path, monkeypatch
+):
+    """Mixed failure shape: some missing lines are truly absent, others
+    are 0-byte placeholders. A real MPS re-run may produce either shape
+    depending on where in the model pipeline the failure happened.
+    Recovery must treat them the same way.
+    """
+    total = 32
+    absent = {3, 7, 11, 18, 22, 27}            # 6 lines: no file at all
+    zero_byte = {12, 19, 24, 30}                # 4 lines: 0-byte placeholder
+    missing = absent | zero_byte
+    assert len(missing) == 10
+
+    proj = _make_project(tmp_path, cues=total)
+    cfg = _cfg_with_fake_script(tmp_path)
+    call_log: list[list[str]] = []
+
+    def fake_run(cmd, stdout=None, stderr=None, text=None, check=None, **kwargs):
+        call_log.append(list(cmd))
+        out_dir = proj / "06_tts_wav"
+
+        def _extract_idx(c):
+            for j, tok in enumerate(c):
+                if tok == "--start" and j + 1 < len(c):
+                    try:
+                        return int(c[j + 1])
+                    except ValueError:
+                        return None
+            return None
+
+        is_recovery = "--start" in cmd and "--end" in cmd
+        if is_recovery:
+            idx = _extract_idx(cmd)
+            assert idx is not None
+            (out_dir / f"line_{idx}_tts.wav").write_bytes(b"\x00" * 4096)
+            return _DummyResult(0)
+
+        for i in range(1, total + 1):
+            if i in absent:
+                continue
+            if i in zero_byte:
+                (out_dir / f"line_{i}_tts.wav").write_bytes(b"")
+            else:
+                (out_dir / f"line_{i}_tts.wav").write_bytes(b"\x00" * 4096)
+        return _DummyResult(0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    state = TtsStage().run(proj, cfg)
+
+    assert state.status == "done", (
+        f"expected recovered status=done, got {state.status!r} "
+        f"error={state.error!r}"
+    )
+    assert len(state.artifacts) == total
+    assert len(call_log) == 1 + len(missing)
