@@ -293,15 +293,39 @@ dub clean --project-dir ~/.hermes/dub-talk-YYYYMMDD-HHMMSS/
 
 ## 測試
 
-```bash
-# 單元測試
-pytest tests/
+### 快速執行
 
-# 整合測試（含 smoke test）
-pytest tests/integration/
+```bash
+# 單元測試 + smoke（預設排除 integration）
+pytest tests/ -v
+
+# 只跑整合測試
+pytest tests/integration/ -v --timeout=900
+
+# 全部一起跑
+pytest tests/ -v -m '' --timeout=900
 ```
 
-整合測試需要完整的影片檔案，執行時間較長。CI 建議分開跑。
+### Unit vs Integration
+
+| 類型 | 指令 | 時間 | 說明 |
+|------|------|------|------|
+| **Unit** | `pytest tests/ -v` | < 10s | 純 Python 邏輯測試，不需要外部工具 |
+| **Integration** | `pytest tests/integration/ -v` | 5–10 min/each | 呼叫 `dub` CLI 跑完整 pipeline，需要 ffmpeg + 所有 dub deps |
+
+### Integration 測試情境
+
+| ID | 檔案 | 情境 | 驗證項目 |
+|----|------|------|----------|
+| T6a | `test_6a_smoke.py` | 30s clip 端到端跑完 | 7 dirs 全建、final MP4 ffprobe OK、SRT 含中文 |
+| T6b | `test_6b_resume.py` | 5min clip 中斷後 resume | SIGKILL 後 status 顯示部分完成、resume 完成後 duration ≈ 300s |
+| T6c | `test_6c_idempotency.py` | 刪一個 ref_audio 後 resume | 只重建受影響的 clip、其他 ref_audio mtime 不變 |
+
+### CI 建議
+
+- **PR check**：只跑 unit + smoke（`pytest tests/ -v`），< 30s
+- **Nightly / merge to main**：跑 integration（`pytest tests/integration/ -v --timeout=900`），預計 15–30 min
+- Integration 測試需要 `test_short.mp4`（30s）和 `test_5min.mp4`（300s）放在 `tests/fixtures/`
 
 ---
 
