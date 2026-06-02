@@ -98,61 +98,48 @@ class ASRStage(Stage):
     name = "02_asr"
 
     def is_done(self, project_dir: Path) -> bool:
-        d = project_dir / "03_asr"
-        return bool(d.exists() and list(d.glob("*.srt")))
+        srt_path = project_dir / "03_asr" / "video.srt"
+        return srt_path.exists()
 
     def run(self, project_dir: Path, config: DubConfig) -> StageState:
-        raw_video = project_dir / "01_raw_video" / "video.mp4"
-        duration = _video_duration(raw_video)
-        end_ts = "00:05:00,000" if duration >= 295 else "00:00:30,000"
-        _write_srt(project_dir / "03_asr" / "video.srt", "Hello from source audio.", end_ts)
+        input_video = project_dir / "01_raw_video" / "video.mp4"
+        srt_out = project_dir / "03_asr" / "video.srt"
+        log_file = project_dir / ".dub" / f"{self.name}.log"
+        cli = config.paths.qwenasr_cli
+
+        srt_out.parent.mkdir(parents=True, exist_ok=True)
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+
+        cmd = [
+            str(cli),
+            "transcribe",
+            str(input_video),
+            "--output-format",
+            "srt",
+        ]
+        if config.defaults.source_lang:
+            cmd += ["--language", config.defaults.source_lang]
+
+        with open(srt_out, "w", encoding="utf-8") as out_fh, open(log_file, "w", encoding="utf-8") as log_fh:
+            result = subprocess.run(
+                cmd,
+                stdout=out_fh,
+                stderr=log_fh,
+                text=True,
+                check=False,
+            )
+
+        if result.returncode != 0:
+            return self.mark_failed(f"qwenasr-mlx exited with code {result.returncode}; see {log_file}")
+        if not srt_out.exists() or not srt_out.read_text(encoding="utf-8").strip():
+            return self.mark_failed(f"qwenasr-mlx produced empty SRT; see {log_file}")
         return self.mark_done(artifacts=["video.srt"], output_dir="03_asr")
 
 
-class RefAudioStage(Stage):
-    name = "03_ref_audio"
-
-    def is_done(self, project_dir: Path) -> bool:
-        d = project_dir / "04_ref_audio"
-        stems_done = StemsStage().is_done(project_dir)
-        refs = list(d.glob("line_*_ref.wav"))
-        return bool(stems_done and refs)
-
-    def run(self, project_dir: Path, config: DubConfig) -> StageState:
-        raw_video = project_dir / "01_raw_video" / "video.mp4"
-        duration = _video_duration(raw_video)
-        ref_dir = project_dir / "04_ref_audio"
-        tts_dir = project_dir / "06_tts_wav"
-        ref_dir.mkdir(parents=True, exist_ok=True)
-        tts_dir.mkdir(parents=True, exist_ok=True)
-        refs: list[str] = []
-        for idx in range(1, 4):
-            ref = ref_dir / f"line_{idx}_ref.wav"
-            tts = tts_dir / f"line_{idx}_tts.wav"
-            if not ref.exists():
-                _ensure_silence_wav(ref, min(duration, 1.0))
-            if not tts.exists():
-                _ensure_silence_wav(tts, min(duration, 1.0))
-            refs.append(ref.name)
-        return self.mark_done(artifacts=refs, output_dir="04_ref_audio")
-
-
-class TranslateStage(Stage):
-    name = "04_translate"
-
-    def is_done(self, project_dir: Path) -> bool:
-        d1 = project_dir / "05_translate"
-        d2 = project_dir / "05_translated_srt"
-        return bool((d1.exists() and list(d1.glob("*.srt"))) or (d2.exists() and list(d2.glob("*.srt"))))
-
-    def run(self, project_dir: Path, config: DubConfig) -> StageState:
-        raw_video = project_dir / "01_raw_video" / "video.mp4"
-        duration = _video_duration(raw_video)
-        end_ts = "00:05:00,000" if duration >= 295 else "00:00:30,000"
-        translated = "這是一段中文翻譯字幕。"
-        for out_dir in [project_dir / "05_translate", project_dir / "05_translated_srt"]:
-            _write_srt(out_dir / "video.zhtw.srt", translated, end_ts)
-        return self.mark_done(artifacts=["video.zhtw.srt"], output_dir="05_translate")
+# RefAudioStage is defined canonically in dub.stages.ref_audio (real wire:
+# ffmpeg-based extraction via dubbing_extract_ref.py). We re-export it here
+# so existing import paths (dub.stages.base.RefAudioStage) keep working.
+from dub.stages.ref_audio import RefAudioStage  # noqa: E402,F401
 
 
 class TTSStage(Stage):
@@ -193,6 +180,9 @@ class AssembleStage(Stage):
         if not legacy.exists():
             _copy_video(src, legacy)
         return self.mark_done(artifacts=[dst.name, legacy.name], output_dir="07_final")
+
+
+from dub.stages.translate import TranslateStage
 
 
 STAGE_REGISTRY: dict[str, Stage] = {

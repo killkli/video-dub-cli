@@ -6,10 +6,10 @@ from dub.stages.base import (
     StemsStage,
     ASRStage,
     RefAudioStage,
-    TranslateStage,
     TTSStage,
     AssembleStage,
 )
+from dub.stages.translate import TranslateStage
 
 AsrStage = ASRStage
 TtsStage = TTSStage
