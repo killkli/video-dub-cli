@@ -261,6 +261,44 @@ def test_dub_run_skip_succeeds_when_project_already_has_translated_srt(runner, t
     assert result.exit_code == 0, result.output
 
 
+def test_dub_run_accepts_video_already_at_project_canonical_path(runner, tmp_path, monkeypatch):
+    project_dir = tmp_path / "proj"
+    canonical_video = project_dir / "01_raw_video" / "video.mp4"
+    canonical_video.parent.mkdir(parents=True)
+    canonical_video.write_bytes(b"fake")
+
+    cfg = tmp_path / "cfg.yaml"
+    cfg.write_text(
+        "paths:\n"
+        "  qwenasr_cli: /bin/true\n"
+        "  omnivoice_python: /bin/true\n"
+        "  skills_dir: /tmp\n"
+        "  translation_skill: /bin/true\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr("dub.cli.project_input_info", lambda _: {
+        "video_path": str(canonical_video),
+        "video_sha256": "abc",
+        "duration_sec": 1.23,
+    })
+    monkeypatch.setattr("dub.cli.run_pipeline", lambda *args, **kwargs: {"ok": True})
+
+    result = runner.invoke(
+        main,
+        [
+            "run", str(canonical_video),
+            "--project-dir", str(project_dir),
+            "--config", str(cfg),
+            "--translate-mode", "delegate",
+            "--yes",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert canonical_video.exists()
+
+
 def test_dub_run_prints_delegate_preflight_summary(runner, tmp_path, monkeypatch):
     video = tmp_path / "video.mp4"
     video.write_bytes(b"fake")

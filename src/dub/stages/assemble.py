@@ -173,6 +173,12 @@ class AssembleStage(Stage):
             state.error = f"remix script not found: {remix_script}"
             return state
 
+        stems_dir = project_dir / "02_stems"
+        canonical_inst = stems_dir / "instrumental.wav"
+        remix_compat_inst = stems_dir / "video.mp4.instrumental.wav"
+        if canonical_inst.exists() and not remix_compat_inst.exists():
+            shutil.copy2(canonical_inst, remix_compat_inst)
+
         out_stem = final_dir / "video_dubbed_stem.mp4"
         # Make sure a stale file from a previous run doesn't get re-detected
         # if remix silently fails to overwrite.

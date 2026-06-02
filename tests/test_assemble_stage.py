@@ -200,6 +200,27 @@ def test_run_invokes_remix_with_exact_cli_shape(tmp_path, monkeypatch):
     assert len(cmd) == 12
 
 
+def test_run_provides_compat_instrumental_path_expected_by_real_remix(tmp_path, monkeypatch):
+    """Real dubbing_remix.py currently resolves 02_stems/video.mp4.instrumental.wav.
+    The stage must provide a compatibility alias from canonical instrumental.wav
+    so the real script can succeed on current committed skills.
+    """
+    proj = _make_project(tmp_path)
+    (proj / "06_tts_wav" / "tts_normalized.wav").write_bytes(b"\x00" * 4096)
+    (proj / "02_stems").mkdir(parents=True, exist_ok=True)
+    (proj / "02_stems" / "instrumental.wav").write_bytes(b"\x00" * 4096)
+
+    fake_run, _ = _record_subprocess(proj)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    state = AssembleStage().run(proj, DubConfig())
+
+    assert state.status == "done"
+    compat = proj / "02_stems" / "video.mp4.instrumental.wav"
+    assert compat.exists()
+    assert compat.read_bytes() == (proj / "02_stems" / "instrumental.wav").read_bytes()
+
+
 def test_run_passes_vocal_gain_and_inst_gain_from_config(tmp_path, monkeypatch):
     """vocal_gain and inst_gain are user-tunable dB values from
     config.defaults; they must be threaded through verbatim.

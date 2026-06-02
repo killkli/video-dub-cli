@@ -57,7 +57,8 @@ def initialize_project(project_dir: Path, video_path: Path) -> Path:
         raise UserError(f"Video file not found: {video_path}")
     _mkdir_layout(project_dir)
     dst = project_dir / "01_raw_video" / "video.mp4"
-    shutil.copy2(video_path, dst)
+    if video_path.resolve() != dst.resolve():
+        shutil.copy2(video_path, dst)
     return project_dir
 
 
