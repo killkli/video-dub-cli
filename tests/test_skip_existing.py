@@ -47,23 +47,47 @@ def test_is_done_true_when_all_artifacts_exist(tmp_path, stage_name, stage):
         (proj / "03_asr").mkdir()
         (proj / "03_asr" / "video.srt").touch()
     elif stage_name == "03_ref_audio":
-        # Stems must be done first (ref audio needs vocal source)
-        (proj / "02_stems").mkdir()
-        (proj / "02_stems" / "vocals.wav").touch()
-        (proj / "02_stems" / "instrumental.wav").touch()
+        # Real-wire ref_audio: 03_asr/video.srt cues must match 04_ref_audio
+        # line_*_ref.wav count (per P3-T2 contract).
+        (proj / "03_asr").mkdir()
+        (proj / "03_asr" / "video.srt").write_text(
+            "1\n00:00:00,000 --> 00:00:01,000\nFirst line\n\n"
+            "2\n00:00:01,000 --> 00:00:02,000\nSecond line\n",
+            encoding="utf-8",
+        )
         (proj / "04_ref_audio").mkdir()
         (proj / "04_ref_audio" / "line_1_ref.wav").touch()
         (proj / "04_ref_audio" / "line_2_ref.wav").touch()
     elif stage_name == "04_translate":
         (proj / "05_translated_srt").mkdir()
-        (proj / "05_translated_srt" / "video.zhtw.srt").touch()
+        (proj / "05_translated_srt" / "video.zhtw.srt").write_text(
+            "1\n00:00:00,000 --> 00:00:01,000\n你好世界\n\n"
+            "2\n00:00:01,000 --> 00:00:02,000\n第二行翻譯\n",
+            encoding="utf-8",
+        )
     elif stage_name == "05_tts":
+        # Real-wire tts: ASR SRT cues + matching 04_ref_audio/line_*_ref.wav
+        # + matching 06_tts_wav/line_*_tts.wav of non-trivial size
+        # (per P3-T3 contract — mirrors 03_ref_audio's invariant).
+        (proj / "03_asr").mkdir()
+        (proj / "03_asr" / "video.srt").write_text(
+            "1\n00:00:00,000 --> 00:00:01,000\nFirst line\n\n"
+            "2\n00:00:01,000 --> 00:00:02,000\nSecond line\n",
+            encoding="utf-8",
+        )
+        (proj / "04_ref_audio").mkdir()
+        (proj / "04_ref_audio" / "line_1_ref.wav").touch()
+        (proj / "04_ref_audio" / "line_2_ref.wav").touch()
         (proj / "06_tts_wav").mkdir()
-        (proj / "06_tts_wav" / "line_1_tts.wav").touch()
-        (proj / "06_tts_wav" / "line_2_tts.wav").touch()
+        # > 1000 bytes — the VoxCPM script's own skip threshold, mirrored here
+        # so is_done treats zero-byte placeholders the same way the script does.
+        (proj / "06_tts_wav" / "line_1_tts.wav").write_bytes(b"\x00" * 2048)
+        (proj / "06_tts_wav" / "line_2_tts.wav").write_bytes(b"\x00" * 2048)
     elif stage_name == "06_assemble":
+        # Real-wire assemble: 07_final/video_dubbed_stem.mp4 must exist with
+        # non-trivial size (the byte-size gate mirrors T2/T3 wav gates).
         (proj / "07_final").mkdir()
-        (proj / "07_final" / "video_dubbed.mp4").touch()
+        (proj / "07_final" / "video_dubbed_stem.mp4").write_bytes(b"\x00" * 2048)
 
     assert stage.is_done(proj) is True
 

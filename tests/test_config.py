@@ -70,6 +70,7 @@ def test_dub_config_full():
     )
     cfg = DubConfig(paths=paths)
     assert cfg.defaults is not None
+    assert cfg.translation.provider == "gemini"
     assert cfg.retry is not None
     assert cfg.logging is not None
 
@@ -106,13 +107,33 @@ defaults:
         assert cfg.defaults.source_lang == "ja"
 
 
-def test_load_config_default_file_intercepted():
-    """~/.config/dub/config.yaml is read automatically when present."""
-    # We can still test the override path: no file exists at default location
-    # so passing None returns defaults (or raises if paths missing)
+def test_load_config_translation_section():
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
-        # Pass a path with no paths section — should raise
+        config_path = write_yaml(tmp, "config.yaml", """
+paths:
+  qwenasr_cli: /usr/bin/true
+  omnivoice_python: /usr/bin/python3
+  skills_dir: /tmp/skills
+  translation_skill: /tmp/trans.py
+translation:
+  provider: gemini
+  model: gemini-2.5-flash
+  api_env_var: GEMINI_API_KEY
+defaults:
+  source_lang: ja
+  target_lang: zh
+""")
+        cfg = load_config(config_path)
+        assert cfg.translation.provider == "gemini"
+        assert cfg.translation.model == "gemini-2.5-flash"
+        assert cfg.translation.api_env_var == "GEMINI_API_KEY"
+
+
+def test_load_config_default_file_intercepted():
+    """~/.config/dub/config.yaml is read automatically when present."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
         bad_path = write_yaml(tmp, "no_paths.yaml", "logging:\n  level: DEBUG\n")
         with pytest.raises(UserError, match="paths section required"):
             load_config(bad_path)
@@ -140,8 +161,6 @@ paths:
 defaults:
   vocal_gain: 1.0
 """)
-        # load_config only merges two files (default + override)
-        # Test that user overrides default
         cfg = load_config(user_path)
         assert cfg.paths.qwenasr_cli == Path("/bin/user")
         assert cfg.defaults.vocal_gain == 1.0

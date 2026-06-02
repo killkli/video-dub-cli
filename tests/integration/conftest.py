@@ -238,6 +238,12 @@ paths:
   translation_skill: /bin/true
   dub_root: ~/.hermes
 
+translation:
+  provider: mock
+  model: mock-offline
+  api_env_var: GOOGLE_API_KEY
+  temperature: 0.0
+
 defaults:
   source_lang: en
   target_lang: zh

@@ -1,13 +1,13 @@
-"""stages/translate.py — Stage 4: Translate SRT using subtitle_translation.py."""
+"""stages/translate.py — Stage 4: Translate SRT using committed Gemini route."""
 
 from __future__ import annotations
 
 from pathlib import Path
-from importlib.util import spec_from_file_location, module_from_spec
 
-from dub.stages.base import Stage, StageState
 from dub.config import DubConfig
+from dub.stages.base import Stage, StageState
 from dub.state import now_iso
+from dub.translator_gemini import translate_srt_file
 
 
 class TranslateStage(Stage):
@@ -24,26 +24,20 @@ class TranslateStage(Stage):
         src_srt = project_dir / "03_asr" / "video.srt"
         dst_srt = project_dir / "05_translated_srt" / "video.zhtw.srt"
 
-        script_path = config.paths.translation_skill
-        spec = spec_from_file_location("subtitle_translation", script_path)
-        if spec is None or spec.loader is None:
+        if not src_srt.exists():
             state.status = "failed"
             state.finished_at = now_iso()
-            state.error = f"Could not load {script_path}"
-            return state
-
-        mod = module_from_spec(spec)
-        spec.loader.exec_module(mod)
-
-        translate_fn = getattr(mod, "translate_srt", None) or getattr(mod, "main", None)
-        if translate_fn is None:
-            state.status = "failed"
-            state.finished_at = now_iso()
-            state.error = f"{script_path} has no translate_srt or main function"
+            state.error = f"Missing ASR SRT: {src_srt}"
             return state
 
         try:
-            translate_fn(str(src_srt), str(dst_srt))
+            translate_srt_file(
+                src_srt=src_srt,
+                dst_srt=dst_srt,
+                source_lang=config.defaults.source_lang,
+                target_lang=config.defaults.target_lang,
+                cfg=config.translation,
+            )
         except Exception as e:
             state.status = "failed"
             state.finished_at = now_iso()

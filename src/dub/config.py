@@ -19,6 +19,13 @@ class PathsConfig(BaseModel):
     dub_root: Path = Field(default_factory=lambda: Path.home() / ".hermes")
 
 
+class TranslationConfig(BaseModel):
+    provider: str = "gemini"
+    model: str = "gemini-2.5-flash"
+    api_env_var: str = "GOOGLE_API_KEY"
+    temperature: float = 0.2
+
+
 class DefaultsConfig(BaseModel):
     source_lang: str = "en"
     target_lang: str = "zh"
@@ -48,6 +55,7 @@ class LoggingConfig(BaseModel):
 
 class DubConfig(BaseModel):
     paths: PathsConfig = Field(default_factory=lambda: PathsConfig.model_validate(DEFAULT_PATHS))
+    translation: TranslationConfig = Field(default_factory=TranslationConfig)
     defaults: DefaultsConfig = Field(default_factory=DefaultsConfig)
     retry: RetryConfig = Field(default_factory=RetryConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
@@ -112,6 +120,7 @@ def load_config(path: Path | str | None = None) -> DubConfig:
 __all__ = [
     "DubConfig",
     "PathsConfig",
+    "TranslationConfig",
     "DefaultsConfig",
     "RetryConfig",
     "LoggingConfig",
