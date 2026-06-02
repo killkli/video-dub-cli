@@ -48,6 +48,15 @@ from dub.stages.tts import TtsStage, _TTS_MIN_BYTES, _missing_tts_wavs
 # ── Shared helpers ─────────────────────────────────────────────────────────
 
 
+def _fmt_ts(seconds: float) -> str:
+    """Format seconds as SRT timestamp HH:MM:SS,mmm. Always 2-digit fields."""
+    h = int(seconds // 3600)
+    m = int((seconds % 3600) // 60)
+    s = int(seconds % 60)
+    ms = int((seconds - int(seconds)) * 1000)
+    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+
+
 def _make_project(tmp_path: Path, cues: int = 3) -> Path:
     """Build the minimum project layout that satisfies the TTS pre-flight.
 
@@ -62,16 +71,10 @@ def _make_project(tmp_path: Path, cues: int = 3) -> Path:
     asr_blocks: list[str] = []
     zh_blocks: list[str] = []
     for i in range(1, cues + 1):
-        start_s = i - 1
-        end_s = i
-        start_ts = f"00:00:{start_s:02d},000"
-        end_ts = f"00:00:{end_s:02d},000"
-        asr_blocks.append(
-            f"{i}\n{start_ts} --> {end_ts}\nHello {i}\n"
-        )
-        zh_blocks.append(
-            f"{i}\n{start_ts} --> {end_ts}\n哈囉 {i}\n"
-        )
+        start_ts = _fmt_ts(float(i - 1))
+        end_ts = _fmt_ts(float(i))
+        asr_blocks.append(f"{i}\n{start_ts} --> {end_ts}\nHello {i}\n")
+        zh_blocks.append(f"{i}\n{start_ts} --> {end_ts}\n哈囉 {i}\n")
         (proj / "04_ref_audio" / f"line_{i}_ref.wav").write_bytes(b"\x00" * 4096)
 
     (proj / "03_asr" / "video.srt").write_text("\n".join(asr_blocks), encoding="utf-8")

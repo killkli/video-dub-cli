@@ -201,8 +201,6 @@ class TtsStage(Stage):
             for m in missing
             if m.startswith("line_") and m.endswith("_tts.wav")
         )
-        import sys as _sys
-        print(f"[TTS recover] starting recovery for {len(missing_idx)} missing lines: {missing_idx}", file=_sys.stderr, flush=True)
 
         recovered: list[str] = []
         still_missing: list[str] = []
@@ -212,7 +210,6 @@ class TtsStage(Stage):
                 zh_srt, asr_srt, src_flag, ref_dir, tts_dir, project_dir,
                 start=idx, end=idx,
             )
-            print(f"[TTS recover] re-running for line_{idx}...", file=_sys.stderr, flush=True)
             rc = self._run_subprocess(cmd, log_file)
             # Stabilization: a fresh --start/--end invocation is small and
             # should land within ~1s. Wait up to 2s for the file to show up.
@@ -229,7 +226,6 @@ class TtsStage(Stage):
                 ok = target.exists() and target.stat().st_size > _TTS_MIN_BYTES
             except OSError:
                 ok = False
-            print(f"[TTS recover] line_{idx} rc={rc} ok={ok}", file=_sys.stderr, flush=True)
             if ok and rc == 0:
                 recovered.append(f"line_{idx}_tts.wav")
             elif ok and rc != 0:
@@ -238,7 +234,6 @@ class TtsStage(Stage):
                 recovered.append(f"line_{idx}_tts.wav")
             else:
                 still_missing.append(f"line_{idx}_tts.wav")
-        print(f"[TTS recover] done. recovered={len(recovered)} still_missing={len(still_missing)}", file=_sys.stderr, flush=True)
         return still_missing
 
     def run(self, project_dir: Path, config: DubConfig) -> StageState:
@@ -304,14 +299,10 @@ class TtsStage(Stage):
         # fully written — so the only thing we need to wait for is visibility.
         expected = _count_srt_cues(asr_srt)
         deadline = time.time() + 10.0
-        import sys as _sys
-        # Initial scan: how many of the expected cues are on disk and big enough?
         missing = _missing_tts_wavs(tts_dir, expected)
-        print(f"[TTS post-flight] expected={expected} initial missing={len(missing)}: {missing}", file=_sys.stderr, flush=True)
         while missing and time.time() < deadline:
             time.sleep(0.25)
             missing = _missing_tts_wavs(tts_dir, expected)
-        print(f"[TTS post-flight] after stabilization missing={len(missing)}: {missing}", file=_sys.stderr, flush=True)
 
         # If anything is still missing, attempt per-line recovery. This is the
         # resumability path: the script now supports --start/--end and skips
@@ -337,7 +328,11 @@ class TtsStage(Stage):
             )
             return state
 
-        state.artifacts = sorted(p.name for p in tts_dir.glob("line_*_tts.wav"))
+        # Use the size-filtered list, not a raw glob: a 0-byte file is not a
+        # valid TTS artifact (the OmniVoice / VoxCPM scripts both use the
+        # same > _TTS_MIN_BYTES gate, so is_done() and stage.artifacts
+        # must agree on what counts as a real artifact).
+        state.artifacts = sorted(p.name for p in _list_tts_wavs(tts_dir))
         state.output_dir = "06_tts_wav"
         state.status = "done"
         state.finished_at = now_iso()
