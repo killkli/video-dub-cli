@@ -1,7 +1,8 @@
 """stages/ref_audio.py — Stage 3: Extract per-segment reference audio from video+SRT.
 
-Real wire: invokes `dubbing_extract_ref.py` (under config.paths.skills_dir) which
-uses ffmpeg to slice 01_raw_video/video.mp4 into 04_ref_audio/line_<i>_ref.wav
+Real wire: invokes repo-owned `vendor/pipeline_scripts/dubbing_extract_ref.py`
+(resolved via config.paths.skills_dir) which uses ffmpeg to slice
+01_raw_video/video.mp4 into 04_ref_audio/line_<i>_ref.wav
 based on the SRT cue timestamps in 03_asr/video.srt.
 
 Output format: 24kHz mono pcm_s16le (OmniVoice ref_audio contract).

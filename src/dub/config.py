@@ -94,10 +94,10 @@ class DubConfig(BaseModel):
 
 
 DEFAULT_PATHS = {
-    "qwenasr_cli": str(Path.home() / ".hermes" / "projects" / "qwenasr-mlx-cli" / ".venv" / "bin" / "qwenasr-mlx"),
-    "omnivoice_python": str(Path.home() / "Dev" / "OmniVoice" / ".venv" / "bin" / "python3"),
-    "skills_dir": str(Path.home() / ".hermes" / "skills" / "media" / "video-dubbing-pipeline" / "scripts"),
-    "translation_skill": str(Path.home() / ".hermes" / "skills" / "media" / "subtitle-translation" / "subtitle_translation.py"),
+    "qwenasr_cli": "qwenasr-mlx",
+    "omnivoice_python": "python3",
+    "skills_dir": str(Path(__file__).resolve().parents[2] / "vendor" / "pipeline_scripts"),
+    "translation_skill": str(Path(__file__).resolve().parents[2] / "src" / "dub" / "translator_gemini.py"),
     "dub_root": str(Path.home() / "video-dub-cli-runs"),
 }
 

@@ -115,6 +115,7 @@ def config(tmp_path):
         fake_bin / "qwenasr-mlx",
         fake_bin / "omnivoice-python",
         fake_scripts / "subtitle_translation.py",
+        fake_scripts / "dubbing_stems.py",
         fake_scripts / "dubbing_extract_ref.py",
         fake_scripts / "dubbing_batch_tts.py",
         fake_scripts / "dubbing_batch_tts_vox.py",
@@ -130,7 +131,13 @@ def config(tmp_path):
             "skills_dir": str(fake_scripts),
             "translation_skill": str(fake_scripts / "subtitle_translation.py"),
             "dub_root": str(fake_root),
-        }
+        },
+        "translation": {
+            "provider": "mock",
+            "model": "mock-offline",
+            "api_env_var": "GOOGLE_API_KEY",
+            "temperature": 0.0,
+        },
     })
 
 

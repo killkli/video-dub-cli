@@ -37,6 +37,12 @@ def test_paths_config_defaults():
     assert p.dub_root == Path.home() / ".hermes"
 
 
+def test_default_paths_use_repo_owned_vendor_scripts():
+    cfg = load_config(None)
+    assert cfg.paths.skills_dir.name == "pipeline_scripts"
+    assert cfg.paths.skills_dir.parent.name == "vendor"
+
+
 def test_defaults_config_defaults():
     d = DefaultsConfig()
     assert d.source_lang == "en"
@@ -96,7 +102,7 @@ def test_load_config_from_yaml_file():
 paths:
   qwenasr_cli: /usr/bin/true
   omnivoice_python: /usr/bin/python3
-  skills_dir: /tmp/skills
+  skills_dir: /tmp/vendor/pipeline_scripts
   translation_skill: /tmp/trans.py
 defaults:
   source_lang: ja
@@ -114,7 +120,7 @@ def test_load_config_translation_section():
 paths:
   qwenasr_cli: /usr/bin/true
   omnivoice_python: /usr/bin/python3
-  skills_dir: /tmp/skills
+  skills_dir: /tmp/vendor/pipeline_scripts
   translation_skill: /tmp/trans.py
 translation:
   provider: gemini
@@ -147,7 +153,7 @@ def test_load_config_merge_user_config_over_defaults():
 paths:
   qwenasr_cli: /bin/default
   omnivoice_python: /bin/default
-  skills_dir: /tmp
+  skills_dir: /tmp/vendor/pipeline_scripts
   translation_skill: /tmp/trans.py
 defaults:
   vocal_gain: 99.0
@@ -156,7 +162,7 @@ defaults:
 paths:
   qwenasr_cli: /bin/user
   omnivoice_python: /bin/user
-  skills_dir: /tmp
+  skills_dir: /tmp/vendor/pipeline_scripts
   translation_skill: /tmp/trans.py
 defaults:
   vocal_gain: 1.0

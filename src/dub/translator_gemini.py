@@ -56,32 +56,33 @@ def _target_language_label(target_lang: str) -> str:
 
 
 def _load_api_key(env_var: str) -> str:
-    key = (os.environ.get(env_var) or "").strip()
-    if key:
-        return key
+    """Load Gemini credentials from process environment only.
 
-    env_path = Path.home() / ".hermes" / ".env"
-    if env_path.exists():
-        for line in env_path.read_text(errors="ignore").splitlines():
-            if not line or line.lstrip().startswith("#") or "=" not in line:
-                continue
-            k, v = line.split("=", 1)
-            if k.strip() == env_var:
-                return v.strip().strip('"').strip("'")
+    Standalone contract: users export the configured env var before running
+    the CLI. We intentionally do not read ~/.hermes/.env or any profile-local
+    secret file here, because that would reintroduce a machine-specific Hermes
+    dependency into the standalone runtime story.
+    """
+    candidates = [env_var]
+    if env_var == "GOOGLE_API_KEY":
+        candidates.append("GEMINI_API_KEY")
+    elif env_var == "GEMINI_API_KEY":
+        candidates.append("GOOGLE_API_KEY")
+    else:
+        candidates.extend(["GOOGLE_API_KEY", "GEMINI_API_KEY"])
 
-    fallbacks = ["GOOGLE_API_KEY", "GEMINI_API_KEY"] if env_var == "GOOGLE_API_KEY" else ["GEMINI_API_KEY", "GOOGLE_API_KEY"]
-    for fb in fallbacks:
-        key = (os.environ.get(fb) or "").strip()
+    seen: list[str] = []
+    for name in candidates:
+        if name in seen:
+            continue
+        seen.append(name)
+        key = (os.environ.get(name) or "").strip()
         if key:
             return key
-        if env_path.exists():
-            for line in env_path.read_text(errors="ignore").splitlines():
-                if not line or line.lstrip().startswith("#") or "=" not in line:
-                    continue
-                k, v = line.split("=", 1)
-                if k.strip() == fb:
-                    return v.strip().strip('"').strip("'")
-    raise TranslationError(f"Gemini API key not found via {env_var}, GOOGLE_API_KEY, or GEMINI_API_KEY")
+
+    raise TranslationError(
+        f"Gemini API key not found in environment; set one of: {', '.join(seen)}"
+    )
 
 
 def _build_prompt(blocks: list[SubtitleBlock], source_lang: str, target_lang: str) -> str:

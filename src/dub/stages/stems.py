@@ -23,6 +23,11 @@ class StemsStage(Stage):
 
         log_file = project_dir / ".dub" / f"{self.name}.log"
         script = config.paths.skills_dir / "dubbing_stems.py"
+        if not script.exists():
+            state.status = "failed"
+            state.finished_at = now_iso()
+            state.error = f"stems script not found: {script}"
+            return state
         video_mp4 = project_dir / "01_raw_video" / "video.mp4"
 
         cmd = [

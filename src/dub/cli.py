@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import shutil
+import subprocess
 from pathlib import Path
 
 import click
@@ -98,6 +100,30 @@ def _preflight_route_summary(project_dir: Path, cfg) -> str:
         f"mode={mode} "
         f"route={route}"
     )
+
+
+def _which_status(name: str) -> tuple[bool, str]:
+    resolved = shutil.which(name)
+    return (resolved is not None, resolved or "missing")
+
+
+def _path_status(path_like: str | Path) -> tuple[bool, str]:
+    p = Path(path_like)
+    return (p.exists(), str(p))
+
+
+def _env_status(*names: str) -> tuple[bool, str]:
+    seen: list[str] = []
+    ordered = []
+    for name in names:
+        if name in seen:
+            continue
+        seen.append(name)
+        ordered.append(name)
+    found = [name for name in ordered if (os.environ.get(name) or "").strip()]
+    if found:
+        return True, ",".join(found)
+    return False, ",".join(ordered)
 
 
 @click.group()
@@ -247,3 +273,46 @@ def validate(project_dir):
         raise click.ClickException(f"validate failed: project={project_dir} {detail}")
 
     click.echo(f"validate ok: project={project_dir} stages={stage_count} {detail}")
+
+
+@main.command()
+@click.option("--config", "config_path", type=click.Path(path_type=Path), default=None)
+def doctor(config_path):
+    """Check standalone runtime readiness and report missing dependencies."""
+    cfg = load_config(config_path)
+
+    checks: list[tuple[str, bool, str]] = []
+    ffmpeg_ok, ffmpeg_detail = _which_status("ffmpeg")
+    checks.append(("ffmpeg", ffmpeg_ok, ffmpeg_detail))
+    ffprobe_ok, ffprobe_detail = _which_status("ffprobe")
+    checks.append(("ffprobe", ffprobe_ok, ffprobe_detail))
+    qwen_ok, qwen_detail = _which_status(str(cfg.paths.qwenasr_cli))
+    checks.append(("qwenasr_cli", qwen_ok, qwen_detail))
+    py_ok, py_detail = _which_status(str(cfg.paths.omnivoice_python))
+    checks.append(("omnivoice_python", py_ok, py_detail))
+    skills_ok, skills_detail = _path_status(cfg.paths.skills_dir)
+    checks.append(("vendor_pipeline_scripts", skills_ok, skills_detail))
+    gemini_ok, gemini_detail = _env_status(cfg.translation.api_env_var, "GOOGLE_API_KEY", "GEMINI_API_KEY")
+    checks.append(("gemini_api_key", gemini_ok, gemini_detail))
+
+    all_ok = True
+    for name, ok, detail in checks:
+        status = "OK" if ok else "MISSING"
+        click.echo(f"{name}: {status} ({detail})")
+        if not ok:
+            all_ok = False
+
+    if all_ok:
+        click.echo("doctor ok: standalone prerequisites look ready")
+    else:
+        raise click.ClickException("doctor found missing prerequisites")
+
+
+@main.command()
+def bootstrap():
+    """Print bootstrap guidance for repo-only setup and backend preparation."""
+    click.echo("bootstrap: repo package install is uv-managed; run `uv sync --extra all` for the full standalone stack")
+    click.echo("bootstrap: install system tools ffmpeg/ffprobe before real media runs")
+    click.echo("bootstrap: copy `.env.example` to your shell env setup and export GOOGLE_API_KEY (or GEMINI_API_KEY) before Gemini translation")
+    click.echo("bootstrap: non-TTS pipeline scripts are now repo-owned under vendor/pipeline_scripts")
+    click.echo("bootstrap: TTS/model backend preparation is route-specific and will be expanded in later standalone phases")

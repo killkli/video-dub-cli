@@ -1,6 +1,7 @@
 """stages/tts.py — Stage 5: per-segment TTS with source-lang routing.
 
-Real wire: invokes one of two scripts (under config.paths.skills_dir):
+Real wire: invokes one of two repo-owned scripts under
+`vendor/pipeline_scripts/` (resolved via config.paths.skills_dir):
 
   en  → dubbing_batch_tts.py    (OmniVoice, MPS)
   ja  → dubbing_batch_tts_vox.py (VoxCPM, gradio_client → local server)

@@ -1,6 +1,7 @@
 """stages/assemble.py — Stage 6: assemble final dubbed video from TTS + stems.
 
-Real wire (P3-T4 contract, frozen by the T0 orchestration gate 2026-06-02):
+Real wire via repo-owned scripts under `vendor/pipeline_scripts/`
+(P3-T4 contract, frozen by the T0 orchestration gate 2026-06-02):
 
   Inputs
     06_tts_wav/line_<i>_tts.wav  — per-cue TTS wavs from Stage 5

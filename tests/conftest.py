@@ -30,7 +30,10 @@ def minimal_config_yaml(tmp_path):
         fake_bin / "qwenasr-mlx",
         fake_bin / "omnivoice-python",
         fake_scripts / "subtitle_translation.py",
+        fake_scripts / "dubbing_stems.py",
         fake_scripts / "dubbing_extract_ref.py",
+        fake_scripts / "dubbing_batch_tts.py",
+        fake_scripts / "dubbing_batch_tts_vox.py",
         fake_scripts / "dubbing_assemble_loudnorm.py",
         fake_scripts / "dubbing_remix.py",
     ]:

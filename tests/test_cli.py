@@ -54,6 +54,29 @@ def test_dub_validate_exits_zero(runner):
     assert result.exit_code == 0
 
 
+def test_dub_bootstrap_exits_zero(runner):
+    result = runner.invoke(main, ["bootstrap"])
+    assert result.exit_code == 0
+    assert "uv sync" in result.output
+
+
+def test_dub_doctor_reports_missing_prereqs(runner, tmp_path):
+    cfg = tmp_path / "cfg.yaml"
+    cfg.write_text(
+        "paths:\n"
+        "  qwenasr_cli: nonexistent-qwen-bin\n"
+        "  omnivoice_python: nonexistent-python-bin\n"
+        "  skills_dir: /definitely/missing/vendor\n"
+        "  translation_skill: /tmp/trans.py\n",
+        encoding="utf-8",
+    )
+    result = runner.invoke(main, ["doctor", "--config", str(cfg)])
+    assert result.exit_code != 0
+    assert "qwenasr_cli: MISSING" in result.output
+    assert "vendor_pipeline_scripts: MISSING" in result.output
+    assert "doctor found missing prerequisites" in result.output
+
+
 def _make_validate_project(tmp_path, *, translate_mode="delegate", translate_stage_status="done"):
     project_dir = tmp_path / "proj"
     for rel in [
@@ -134,7 +157,7 @@ def test_dub_run_use_existing_requires_translated_srt(runner, tmp_path):
         "paths:\n"
         "  qwenasr_cli: /bin/true\n"
         "  omnivoice_python: /bin/true\n"
-        "  skills_dir: /tmp\n"
+        "  skills_dir: /tmp/vendor/pipeline_scripts\n"
         "  translation_skill: /bin/true\n",
         encoding="utf-8",
     )
@@ -161,7 +184,7 @@ def test_dub_run_skip_requires_existing_project_translated_srt(runner, tmp_path)
         "paths:\n"
         "  qwenasr_cli: /bin/true\n"
         "  omnivoice_python: /bin/true\n"
-        "  skills_dir: /tmp\n"
+        "  skills_dir: /tmp/vendor/pipeline_scripts\n"
         "  translation_skill: /bin/true\n",
         encoding="utf-8",
     )
@@ -191,7 +214,7 @@ def test_dub_run_persists_translate_mode_and_translated_srt(runner, tmp_path, mo
         "paths:\n"
         "  qwenasr_cli: /bin/true\n"
         "  omnivoice_python: /bin/true\n"
-        "  skills_dir: /tmp\n"
+        "  skills_dir: /tmp/vendor/pipeline_scripts\n"
         "  translation_skill: /bin/true\n",
         encoding="utf-8",
     )
@@ -268,7 +291,7 @@ def test_dub_run_prints_preflight_route_summary(runner, tmp_path, monkeypatch):
         "paths:\n"
         "  qwenasr_cli: /bin/true\n"
         "  omnivoice_python: /bin/true\n"
-        "  skills_dir: /tmp\n"
+        "  skills_dir: /tmp/vendor/pipeline_scripts\n"
         "  translation_skill: /bin/true\n",
         encoding="utf-8",
     )
@@ -361,7 +384,7 @@ def test_dub_run_use_existing_fails_with_nonexistent_translated_srt_path(runner,
         "paths:\n"
         "  qwenasr_cli: /bin/true\n"
         "  omnivoice_python: /bin/true\n"
-        "  skills_dir: /tmp\n"
+        "  skills_dir: /tmp/vendor/pipeline_scripts\n"
         "  translation_skill: /bin/true\n",
         encoding="utf-8",
     )
@@ -395,7 +418,7 @@ def test_dub_run_skip_succeeds_when_project_already_has_translated_srt(runner, t
         "paths:\n"
         "  qwenasr_cli: /bin/true\n"
         "  omnivoice_python: /bin/true\n"
-        "  skills_dir: /tmp\n"
+        "  skills_dir: /tmp/vendor/pipeline_scripts\n"
         "  translation_skill: /bin/true\n",
         encoding="utf-8",
     )
@@ -432,7 +455,7 @@ def test_dub_run_accepts_video_already_at_project_canonical_path(runner, tmp_pat
         "paths:\n"
         "  qwenasr_cli: /bin/true\n"
         "  omnivoice_python: /bin/true\n"
-        "  skills_dir: /tmp\n"
+        "  skills_dir: /tmp/vendor/pipeline_scripts\n"
         "  translation_skill: /bin/true\n",
         encoding="utf-8",
     )
@@ -468,7 +491,7 @@ def test_dub_run_prints_delegate_preflight_summary(runner, tmp_path, monkeypatch
         "paths:\n"
         "  qwenasr_cli: /bin/true\n"
         "  omnivoice_python: /bin/true\n"
-        "  skills_dir: /tmp\n"
+        "  skills_dir: /tmp/vendor/pipeline_scripts\n"
         "  translation_skill: /bin/true\n",
         encoding="utf-8",
     )
@@ -510,7 +533,7 @@ def test_dub_run_prints_use_existing_preflight_summary(runner, tmp_path, monkeyp
         "paths:\n"
         "  qwenasr_cli: /bin/true\n"
         "  omnivoice_python: /bin/true\n"
-        "  skills_dir: /tmp\n"
+        "  skills_dir: /tmp/vendor/pipeline_scripts\n"
         "  translation_skill: /bin/true\n",
         encoding="utf-8",
     )
@@ -551,7 +574,7 @@ def test_dub_run_prints_skip_preflight_summary(runner, tmp_path, monkeypatch):
         "paths:\n"
         "  qwenasr_cli: /bin/true\n"
         "  omnivoice_python: /bin/true\n"
-        "  skills_dir: /tmp\n"
+        "  skills_dir: /tmp/vendor/pipeline_scripts\n"
         "  translation_skill: /bin/true\n",
         encoding="utf-8",
     )
