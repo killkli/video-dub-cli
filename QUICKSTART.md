@@ -48,13 +48,40 @@ translation:
 
 ### Step 2：執行配音
 
+**英文 → 中文（delegate mode，CLI 自己翻譯）：**
 ```bash
 dub run /path/to/input/my_talk.mp4 --source-lang en --target-lang zh
 ```
 
-### Step 3：找到輸出
+**日文 → 中文（delegate mode，CLI 自己翻譯）：**
+```bash
+dub run /path/to/input/my_anime.mp4 --source-lang ja --target-lang zh
+```
 
-輸出位置：`~/.hermes/dub-my_talk-<timestamp>/07_final/video_dubbed_stem.mp4`
+**已有外部翻譯字幕（use-existing mode）：**
+```bash
+dub run /path/to/input/my_talk.mp4 \
+  --source-lang en \
+  --target-lang zh \
+  --translate-mode use-existing \
+  --translated-srt /path/to/input/my_talk.zhtw.srt
+```
+
+### Step 3：確認狀態
+
+```bash
+# 查看每個 stage 的狀態
+dub status --project-dir ~/.hermes/dub-my_talk-<timestamp>/
+
+# 驗證專案結構與最終輸出
+dub validate --project-dir ~/.hermes/dub-my_talk-<timestamp>/
+```
+
+### Step 4：找到輸出
+
+```
+~/.hermes/dub-<topic>-<timestamp>/07_final/video_dubbed_stem.mp4
+```
 
 ---
 
@@ -62,14 +89,6 @@ dub run /path/to/input/my_talk.mp4 --source-lang en --target-lang zh
 
 ```bash
 dub resume --project-dir ~/.hermes/dub-my_talk-<timestamp>/
-```
-
----
-
-## 確認狀態
-
-```bash
-dub status --project-dir ~/.hermes/dub-my_talk-<timestamp>/
 ```
 
 ---
@@ -82,28 +101,4 @@ dub clean --project-dir ~/.hermes/dub-my_talk-<timestamp>/
 
 # 再跑一次
 dub run /path/to/input/my_talk.mp4 --source-lang en --target-lang zh
-```
-
----
-
-## 常用範例
-
-### 英文 → 中文
-```bash
-dub run talk.mp4 --source-lang en --target-lang zh
-```
-
-### 日文 → 中文
-```bash
-# 先確認 config_ja2zh.yaml 中的 voxcpm 路徑正確
-cp examples/config_ja2zh.yaml ~/.config/dub/config.yaml
-dub run anime.mp4 --source-lang ja --target-lang zh
-```
-
-### 使用已翻譯的 SRT（`use-existing` route）
-```bash
-cp examples/config_use_existing_en2zh.yaml ~/.config/dub/config.yaml
-dub run talk.mp4 --source-lang en --target-lang zh \
-  --translate-mode use-existing \
-  --translated-srt /path/to/translated.srt
 ```

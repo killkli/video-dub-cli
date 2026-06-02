@@ -12,15 +12,23 @@ dub run talk.mp4 --source-lang en --target-lang zh
 
 ## 目前建議使用情境
 
-- **最穩定**：已有外部翻好的中文字幕，使用 `--translate-mode use-existing`
-- **可用**：英文或日文片源，走 `--translate-mode delegate` 讓 CLI 自己做翻譯
-- **僅限既有專案**：`--translate-mode skip`，前提是 project 內已經有 `05_translated_srt/video.zhtw.srt`
-- **適合 operator / 開發者**：願意看 log、理解 project 結構、必要時使用 `resume` / `status`
-- **尚未承諾**：任意陌生片源都能零介入一次成功
+| 情境 | translate-mode | 必要條件 | 單一指令 |
+|------|---------------|---------|---------|
+| 已有外部翻譯字幕 | `--translate-mode use-existing` | `--translated-srt <path>` 已存在 | `dub run <video> --src en --tgt zh --translate-mode use-existing --translated-srt <path>` |
+| CLI 自己做翻譯（英文） | `--translate-mode delegate`（預設） | Gemini API key 可用 | `dub run <video> --src en --tgt zh` |
+| CLI 自己做翻譯（日文） | `--translate-mode delegate`（預設） | VoxCPM script 可用 | `dub run <video> --src ja --tgt zh` |
+| 既有專案（已跑過翻譯） | `--translate-mode skip` | `project/05_translated_srt/video.zhtw.srt` 已存在 | `dub run <video> --src en --tgt zh --translate-mode skip` |
+
+## 此 CLI 不是什麼
+
+> **这不是「任意片源都保證零介入一次成功」的最終產品。**
+
+目前 `video-dub-cli` 是 **operator-grade CLI**（階段性可用），而非 fully productized 通用配音機。你需要了解 `translate-mode` 契約、project 結構、必要時使用 `resume` / `status` / `clean`，才能穩定操作。
 
 ## QA / 交接文件
 
 - Operator QA 實跑記錄：`docs/operator-qa-supported-flow-2026-06-02.md`
+- Operator runbook（失敗恢復指南）：`docs/operator-runbook.md`
 - Release / handoff checklist：`docs/release-handoff-checklist.md`
 
 ---
