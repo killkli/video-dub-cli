@@ -151,24 +151,11 @@ from dub.stages.tts import TtsStage  # noqa: E402,F401
 TTSStage = TtsStage
 
 
-class AssembleStage(Stage):
-    name = "06_assemble"
-
-    def is_done(self, project_dir: Path) -> bool:
-        d = project_dir / "07_final"
-        return bool(d.exists() and list(d.glob("*.mp4")))
-
-    def run(self, project_dir: Path, config: DubConfig) -> StageState:
-        src = project_dir / "01_raw_video" / "video.mp4"
-        d = project_dir / "07_final"
-        d.mkdir(parents=True, exist_ok=True)
-        dst = d / "video_dubbed_stem.mp4"
-        _copy_video(src, dst)
-        legacy = d / "video_dubbed.mp4"
-        if not legacy.exists():
-            _copy_video(src, legacy)
-        return self.mark_done(artifacts=[dst.name, legacy.name], output_dir="07_final")
-
+# AssembleStage is defined canonically in dub.stages.assemble (real wire:
+# time-aligned loudnorm builder + remix + legacy alias/fulltrack handling).
+# We re-export it here so existing import paths (dub.stages.base.AssembleStage)
+# keep working.
+from dub.stages.assemble import AssembleStage  # noqa: E402,F401
 
 from dub.stages.translate import TranslateStage
 

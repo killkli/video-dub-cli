@@ -165,6 +165,8 @@ class TtsStage(Stage):
         ])
 
         with open(log_file, "w", encoding="utf-8") as log_fh:
+            log_fh.write("CMD: " + " ".join(str(part) for part in cmd) + "\n")
+            log_fh.flush()
             result = subprocess.run(
                 cmd,
                 stdout=log_fh,
