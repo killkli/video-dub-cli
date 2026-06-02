@@ -258,6 +258,129 @@ def test_dub_resume_restores_source_lang_from_state(runner, tmp_path, monkeypatc
     assert seen["translate_mode"] == "delegate"
 
 
+def test_dub_run_prints_preflight_route_summary(runner, tmp_path, monkeypatch):
+    """P4 Contract 1: dub run prints a single preflight: line with src/tgt/project/mode/route."""
+    video = tmp_path / "video.mp4"
+    video.write_bytes(b"fake")
+    project_dir = tmp_path / "proj"
+    cfg = tmp_path / "cfg.yaml"
+    cfg.write_text(
+        "paths:\n"
+        "  qwenasr_cli: /bin/true\n"
+        "  omnivoice_python: /bin/true\n"
+        "  skills_dir: /tmp\n"
+        "  translation_skill: /bin/true\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr("dub.cli.project_input_info", lambda _: {
+        "video_path": str(project_dir / "01_raw_video" / "video.mp4"),
+        "video_sha256": "abc",
+        "duration_sec": 1.23,
+    })
+    monkeypatch.setattr("dub.cli.run_pipeline", lambda *args, **kwargs: {"ok": True})
+
+    result = runner.invoke(
+        main,
+        [
+            "run", str(video),
+            "--project-dir", str(project_dir),
+            "--config", str(cfg),
+            "--source-lang", "ja",
+            "--target-lang", "zh",
+            "--translate-mode", "delegate",
+            "--yes",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+
+    preflight_lines = [
+        line for line in result.output.splitlines()
+        if line.startswith("preflight:")
+    ]
+    assert len(preflight_lines) == 1, result.output
+    preflight = preflight_lines[0]
+    assert f"src=ja" in preflight
+    assert f"tgt=zh" in preflight
+    assert f"project={project_dir}" in preflight
+    assert f"mode=delegate" in preflight
+    assert "route=" in preflight
+    assert "translate=delegate" in preflight
+
+
+def test_dub_resume_restores_use_existing_route_from_state(runner, tmp_path, monkeypatch):
+    """P4 Contract 1: dub resume re-applies state-derived route (use-existing mode + external srt) on a fresh invocation."""
+    project_dir = tmp_path / "proj"
+    (project_dir / "01_raw_video").mkdir(parents=True)
+    (project_dir / ".dub").mkdir(parents=True)
+    (project_dir / "01_raw_video" / "video.mp4").write_bytes(b"fake")
+    external_srt = tmp_path / "external.zhtw.srt"
+    external_srt.write_text("1\n00:00:00,000 --> 00:00:01,000\n哈囉\n", encoding="utf-8")
+
+    save_state(project_dir, {
+        "project_id": project_dir.name,
+        "input": {
+            "video_path": str(project_dir / "01_raw_video" / "video.mp4"),
+            "video_sha256": "abc",
+            "duration_sec": 1.23,
+            "source_lang": "en",
+            "target_lang": "zh",
+            "translate_mode": "use-existing",
+            "translated_srt": str(external_srt),
+        },
+        "stages": {},
+    })
+
+    seen = {}
+
+    def fake_run_pipeline(project_dir_arg, cfg, yes=False):
+        seen["source_lang"] = cfg.defaults.source_lang
+        seen["target_lang"] = cfg.defaults.target_lang
+        seen["translate_mode"] = cfg.translation.mode
+        seen["translated_srt"] = str(cfg.translation.translated_srt) if cfg.translation.translated_srt else None
+        return {"ok": True}
+
+    monkeypatch.setattr("dub.cli.run_pipeline", fake_run_pipeline)
+
+    result = runner.invoke(main, ["resume", "--project-dir", str(project_dir)])
+
+    assert result.exit_code == 0, result.output
+    assert seen["source_lang"] == "en"
+    assert seen["target_lang"] == "zh"
+    assert seen["translate_mode"] == "use-existing"
+    assert seen["translated_srt"] == str(external_srt)
+
+
+def test_dub_run_use_existing_fails_with_nonexistent_translated_srt_path(runner, tmp_path):
+    """FR-2 from QA matrix: --translated-srt pointing to a non-existent file must fail fast."""
+    video = tmp_path / "video.mp4"
+    video.write_bytes(b"fake")
+    cfg = tmp_path / "cfg.yaml"
+    cfg.write_text(
+        "paths:\n"
+        "  qwenasr_cli: /bin/true\n"
+        "  omnivoice_python: /bin/true\n"
+        "  skills_dir: /tmp\n"
+        "  translation_skill: /bin/true\n",
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        main,
+        [
+            "run", str(video),
+            "--project-dir", str(tmp_path / "proj"),
+            "--config", str(cfg),
+            "--translate-mode", "use-existing",
+            "--translated-srt", "/nonexistent/path/missing.srt",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "translated SRT not found: /nonexistent/path/missing.srt" in result.output
+
+
 def test_dub_run_skip_succeeds_when_project_already_has_translated_srt(runner, tmp_path, monkeypatch):
     video = tmp_path / "video.mp4"
     video.write_bytes(b"fake")
