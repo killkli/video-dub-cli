@@ -8,6 +8,8 @@ dub run talk.mp4 --source-lang en --target-lang zh
 
 6 個 stage 全自動：人聲分離 → 語音辨識 → 提取範例音頻 → 翻譯 → TTS 配音 → 組裝MP4。中斷後 `dub resume` 接續。
 
+> **目前狀態**：CLI、state/resume、clean/status/validate、integration tests 都已可用；6 個 stage 目前先以可重現的 stub 實作產生測試用產物，確保工作流與斷點續跑契約已穩定。下一階段再把每個 stage 接到真實的 qwenASR / 翻譯 / TTS / remix 腳本。
+
 ---
 
 ## 目錄

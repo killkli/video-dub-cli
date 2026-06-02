@@ -1,6 +1,6 @@
 # video-dub-cli Design Specification
 
-> Placeholder — T0 pending. Full spec to be added by T0.
+> Current implemented contract: installable `dub` CLI with `run/resume/status/clean/validate`, Pydantic-based config/state models, 6-stage resumable pipeline runner, and stub stage implementations that create deterministic test artifacts. Real external tool wiring (qwenasr / translation / OmniVoice / remix scripts) is intentionally deferred to the next phase.
 
 ## 1. Overview
 
