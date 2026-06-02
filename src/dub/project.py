@@ -9,12 +9,13 @@ from pathlib import Path
 from dub.errors import UserError
 
 
-# Stage output directories (1-indexed to match design)
+# Stage output directories (compat: keep both 05_translate and legacy 05_translated_srt)
 STAGE_DIRS = [
     "01_raw_video",
     "02_stems",
     "03_asr",
     "04_ref_audio",
+    "05_translate",
     "05_translated_srt",
     "06_tts_wav",
     "07_final",
@@ -33,47 +34,49 @@ def video_sha256(path: Path) -> str:
 
 def get_duration_sec(path: Path) -> float:
     import subprocess
+
     r = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-         "-of", "csv=p=0", str(path)],
-        capture_output=True, text=True, check=True,
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)],
+        capture_output=True,
+        text=True,
+        check=True,
     )
     return float(r.stdout.strip())
 
 
+def _mkdir_layout(project_dir: Path) -> None:
+    project_dir.mkdir(parents=True, exist_ok=True)
+    (project_dir / ".dub").mkdir(exist_ok=True)
+    for d in STAGE_DIRS:
+        (project_dir / d).mkdir(exist_ok=True)
+
+
+def initialize_project(project_dir: Path, video_path: Path) -> Path:
+    """Initialize exactly at project_dir and copy source video into 01_raw_video/video.mp4."""
+    if not video_path.exists():
+        raise UserError(f"Video file not found: {video_path}")
+    _mkdir_layout(project_dir)
+    dst = project_dir / "01_raw_video" / "video.mp4"
+    shutil.copy2(video_path, dst)
+    return project_dir
+
+
 def create_project(dub_root: Path, video_path: Path, topic: str | None = None) -> Path:
-    """
-    Create a new dubbing project directory and populate 01_raw_video.
-    Returns the project dir path.
-    """
+    """Create a timestamped dubbing project directory under dub_root."""
     if not video_path.exists():
         raise UserError(f"Video file not found: {video_path}")
 
-    # Derive topic from video filename
     if topic is None:
         stem = video_path.stem
         topic = stem.strip().replace(" ", "-").replace("_", "-")
 
-    # Unique project dir: dub-{topic}-{timestamp}
     import datetime
+
     ts = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     project_dir = dub_root / f"dub-{topic}-{ts}"
-
     if project_dir.exists():
         raise UserError(f"Project directory already exists: {project_dir}")
-
-    project_dir.mkdir(parents=True, exist_ok=True)
-    (project_dir / ".dub").mkdir(exist_ok=True)
-
-    # Create all stage directories
-    for d in STAGE_DIRS:
-        (project_dir / d).mkdir(exist_ok=True)
-
-    # Copy video to 01_raw_video/
-    dst = project_dir / "01_raw_video" / "video.mp4"
-    shutil.copy2(video_path, dst)
-
-    return project_dir
+    return initialize_project(project_dir, video_path)
 
 
 def project_input_info(project_dir: Path) -> dict:
