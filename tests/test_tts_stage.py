@@ -9,6 +9,19 @@ from dub.config import DubConfig
 from dub.stages.tts import TtsStage
 
 
+def test_tts_stage_uses_ja_route_for_japanese_source(tmp_path):
+    proj = _make_project(tmp_path, cues=1)
+    cfg = _cfg_with_fake_script(tmp_path)
+    (tmp_path / "dubbing_batch_tts_vox.py").write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+    cfg.defaults.source_lang = "ja"
+
+    script, src_flag, needs_project_dir = TtsStage()._resolve_route(cfg.defaults.source_lang, cfg.paths.skills_dir)
+
+    assert script.name == "dubbing_batch_tts_vox.py"
+    assert src_flag == "--ja-srt"
+    assert needs_project_dir is True
+
+
 class DummyResult:
     def __init__(self, returncode: int = 0):
         self.returncode = returncode
