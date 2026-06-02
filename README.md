@@ -1,14 +1,23 @@
 # video-dub-cli
 
-**把任何英文影片自動配音成中文 — 一個指令就完成。**
+**把影片送進 CLI，跑完整配音 workflow 的單一入口。**
 
 ```
 dub run talk.mp4 --source-lang en --target-lang zh
 ```
 
-6 個 stage 全自動：人聲分離 → 語音辨識 → 提取範例音頻 → 翻譯 → TTS 配音 → 組裝MP4。中斷後 `dub resume` 接續。
+6 個 stage 串接：人聲分離 → 語音辨識 → 提取範例音頻 → 翻譯 → TTS 配音 → 組裝 MP4。中斷後可用 `dub resume` 接續。
 
-> **目前狀態**：CLI、state/resume、clean/status/validate、integration tests 都已可用；6 個 stage 目前先以可重現的 stub 實作產生測試用產物，確保工作流與斷點續跑契約已穩定。下一階段再把每個 stage 接到真實的 qwenASR / 翻譯 / TTS / remix 腳本。
+> **目前狀態（2026-06-02）**：`dub run/resume/status/clean/validate` 均可用，stage runner 與 operator-level integration tests 已通過。翻譯 stage 已接到 committed Gemini route；ASR / TTS / assemble 走既有技能腳本。這個專案目前可視為 **operator-grade CLI**，而不是「任何片源都保證無腦一個指令完成」的最終產品。
+
+## 目前建議使用情境
+
+- **最穩定**：已有外部翻好的中文字幕，使用 `--translate-mode use-existing`
+- **可用**：英文或日文片源，走 `--translate-mode delegate` 讓 CLI 自己做翻譯
+- **僅限既有專案**：`--translate-mode skip`，前提是 project 內已經有 `05_translated_srt/video.zhtw.srt`
+- **適合 operator / 開發者**：願意看 log、理解 project 結構、必要時使用 `resume` / `status`
+- **尚未承諾**：任意陌生片源都能零介入一次成功
+
 
 ---
 
@@ -65,7 +74,14 @@ dub --help
 cp examples/config_en2zh.yaml ~/.config/dub/config.yaml
 vim ~/.config/dub/config.yaml   # 修改 paths（如 qwenasr_cli、omnivoice_python）
 
-# 2. 執行配音
+# 2A. 最推薦：已有外部翻譯 SRT
+dub run /path/to/input/my_talk.mp4 \
+  --source-lang en \
+  --target-lang zh \
+  --translate-mode use-existing \
+  --translated-srt /path/to/input/my_talk.zhtw.srt
+
+# 2B. 讓 CLI 自己翻譯
 dub run /path/to/input/my_talk.mp4 --source-lang en --target-lang zh
 
 # 3. 輸出位置
@@ -100,10 +116,44 @@ dub run VIDEO --source-lang en --target-lang zh [OPTIONS]
   --yes, -y                 跳過所有確認提示
 
 # 範例
-dub run talk.mp4 --src en --tgt zh                          # 英文→中文
-dub run talk.mp4 --src en --tgt zh --keep-fulltrack          # 含全軌版
-dub run talk.mp4 --src en --tgt zh --translate-mode skip    # 跳過翻譯 stage
+dub run talk.mp4 --src en --tgt zh
+dub run talk.mp4 --src en --tgt zh --keep-fulltrack
+dub run talk.mp4 --src en --tgt zh --translate-mode use-existing --translated-srt talk.zhtw.srt
+dub run talk.mp4 --project-dir ~/.hermes/dub-talk-20260602-120000 --src en --tgt zh --translate-mode skip
 ```
+
+### Translation mode 使用矩陣
+
+- `delegate`
+  - 用途：讓 CLI 直接執行翻譯 stage
+  - 適用：fresh run / 新專案
+  - 需求：可用的 translation config（預設 Gemini route）
+
+- `use-existing`
+  - 用途：直接採用你已經準備好的翻譯字幕
+  - 適用：fresh run 或既有 project 都可
+  - 必要條件：必須提供 `--translated-srt /path/to/file.srt`
+  - 行為：CLI 會把該 SRT 複製進專案，後續 TTS / assemble 直接使用
+
+- `skip`
+  - 用途：跳過翻譯 stage 本身
+  - 適用：**只能用在既有 project**
+  - 必要條件：project 內已經存在 `05_translated_srt/video.zhtw.srt`
+  - 若 fresh run 直接使用：CLI 會 fail fast 並提示改用 `use-existing`
+
+### 單一指令的現實定義
+
+這個專案目前的「單一指令」是指：
+
+- 你有一個穩定的 CLI 入口：`dub run`
+- 它會建立 project、保存 state、支援 resume / clean / validate
+- 在已支援情境下，可以一次把 workflow 往後跑完
+
+但它**目前不代表**：
+
+- 任意片源都保證零介入成功
+- 任意英文/日文影片都已經完成產品級 UX 收斂
+- 不需要理解 `translate-mode` / project artifact 契約
 
 ### `dub resume` — 繼續中斷的 pipeline
 
@@ -332,9 +382,10 @@ cat ~/.config/dub/config.yaml | grep omnivoice
 
 ### 翻譯子代理失敗
 
-- 確認 `translation_skill` 路徑正確
-- 檢查 `.dub/log.txt` 中的詳細錯誤
-- 可用 `--translate-mode skip` 跳過翻譯 stage（直接用現有 SRT）
+- 確認 translation config 可用（目前預設為 committed Gemini route）
+- 檢查對應 stage log 與 `.dub/state.json` 的錯誤欄位
+- 若你已經有翻譯字幕，優先改用 `--translate-mode use-existing --translated-srt <file>`
+- `--translate-mode skip` 只適用於專案內已經存在 `05_translated_srt/video.zhtw.srt` 的情況
 
 ---
 
