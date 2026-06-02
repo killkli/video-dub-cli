@@ -1,0 +1,31 @@
+# Use pre-existing translated SRT (skip translation stage)
+# Useful when you've already translated externally
+
+paths:
+  qwenasr_cli: /path/to/qwenasr-mlx
+  omnivoice_python: /path/to/omnivoice-python
+  skills_dir: /path/to/video-dubbing-pipeline/scripts
+  dub_root: ~/.hermes
+  translation_skill: /path/to/subtitle_translation.py
+
+defaults:
+  source_lang: en
+  target_lang: zh
+  vocal_gain: 3.0
+  inst_gain: -3.0
+  keep_fulltrack: false
+
+retry:
+  max_attempts: 3
+  backoff_seconds: 5.0
+  retry_on:
+    - subprocess.CalledProcessError
+    - TimeoutError
+    - ConnectionError
+
+logging:
+  level: INFO
+  json_logs: false
+  progress: rich
+
+# translate-mode: use-existing  # <- set via CLI flag: --translate-mode use-existing --translated-srt /path/to.srt
