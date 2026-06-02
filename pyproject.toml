@@ -24,3 +24,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "integration: end-to-end CLI workflow tests",
+    "timeout: long-running test budget marker",
+]

@@ -21,6 +21,14 @@ from dub import state as state_module
 from dub.state import ProjectState, StageState, now_iso
 
 
+def _artifacts_intact(project_dir: Path, stage_state: StageState) -> bool:
+    """Return True when recorded stage artifacts still exist on disk."""
+    if not stage_state.output_dir or not stage_state.artifacts:
+        return False
+    out_dir = project_dir / stage_state.output_dir
+    return out_dir.exists() and all((out_dir / name).exists() for name in stage_state.artifacts)
+
+
 def run_pipeline(
     project_dir: Path,
     config: DubConfig,
@@ -53,7 +61,11 @@ def run_pipeline(
         log = logger.bind(stage=stage.name)
         stage_state = s.stages[stage.name]
 
-        if stage.is_done(project_dir):
+        can_skip = stage.is_done(project_dir)
+        if can_skip and stage_state.status in {"done", "skipped"} and stage_state.artifacts:
+            can_skip = _artifacts_intact(project_dir, stage_state)
+
+        if can_skip:
             stage_state.status = "skipped"
             stage_state.finished_at = now_iso()
             state_module.save_state(project_dir, s)
