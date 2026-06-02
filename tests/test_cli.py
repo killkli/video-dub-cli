@@ -2,6 +2,7 @@ import pytest
 from click.testing import CliRunner
 from dub.cli import main
 from dub.state import load_state
+from dub.state import save_state
 
 
 @pytest.fixture
@@ -51,6 +52,78 @@ def test_dub_clean_exits_zero(runner):
 def test_dub_validate_exits_zero(runner):
     result = runner.invoke(main, ["validate", "--project-dir", "/tmp"])
     assert result.exit_code == 0
+
+
+def _make_validate_project(tmp_path, *, translate_mode="delegate", translate_stage_status="done"):
+    project_dir = tmp_path / "proj"
+    for rel in [
+        "01_raw_video",
+        "02_stems",
+        "03_asr",
+        "04_ref_audio",
+        "05_translate",
+        "05_translated_srt",
+        "06_tts_wav",
+        "07_final",
+        ".dub",
+    ]:
+        (project_dir / rel).mkdir(parents=True, exist_ok=True)
+
+    (project_dir / "01_raw_video" / "video.mp4").write_bytes(b"fake")
+    (project_dir / "03_asr" / "video.srt").write_text(
+        "1\n00:00:00,000 --> 00:00:01,000\nHello\n",
+        encoding="utf-8",
+    )
+
+    state = {
+        "project_id": project_dir.name,
+        "input": {
+            "translate_mode": translate_mode,
+            "translated_srt": "/tmp/external.zhtw.srt" if translate_mode == "use-existing" else None,
+        },
+        "stages": {
+            "01_stems": {"status": "done", "attempts": 1, "artifacts": [], "output_dir": "02_stems", "error": None},
+            "02_asr": {"status": "done", "attempts": 1, "artifacts": ["video.srt"], "output_dir": "03_asr", "error": None},
+            "03_ref_audio": {"status": "done", "attempts": 1, "artifacts": [], "output_dir": "04_ref_audio", "error": None},
+            "04_translate": {"status": translate_stage_status, "attempts": 1, "artifacts": ["video.zhtw.srt"] if translate_stage_status == "done" else [], "output_dir": "05_translated_srt", "error": None},
+            "05_tts": {"status": "pending", "attempts": 0, "artifacts": [], "output_dir": None, "error": None},
+            "06_assemble": {"status": "pending", "attempts": 0, "artifacts": [], "output_dir": None, "error": None},
+        },
+    }
+    save_state(project_dir, state)
+    return project_dir
+
+
+def test_dub_validate_fails_when_translated_srt_required_but_missing(runner, tmp_path):
+    project_dir = _make_validate_project(tmp_path, translate_mode="delegate", translate_stage_status="done")
+
+    result = runner.invoke(main, ["validate", "--project-dir", str(project_dir)])
+
+    assert result.exit_code != 0
+    assert "translated subtitle required but missing" in result.output
+    assert "mode=delegate" in result.output
+
+
+def test_dub_validate_allows_missing_translated_srt_when_translate_stage_skipped(runner, tmp_path):
+    project_dir = _make_validate_project(tmp_path, translate_mode="skip", translate_stage_status="skipped")
+
+    result = runner.invoke(main, ["validate", "--project-dir", str(project_dir)])
+
+    assert result.exit_code == 0
+    assert "validate ok:" in result.output
+    assert "mode=skip" in result.output
+
+
+def test_dub_validate_ok_when_use_existing_translated_srt_present(runner, tmp_path):
+    project_dir = _make_validate_project(tmp_path, translate_mode="use-existing", translate_stage_status="done")
+    translated = project_dir / "05_translated_srt" / "video.zhtw.srt"
+    translated.write_text("1\n00:00:00,000 --> 00:00:01,000\n哈囉\n", encoding="utf-8")
+
+    result = runner.invoke(main, ["validate", "--project-dir", str(project_dir)])
+
+    assert result.exit_code == 0
+    assert "validate ok:" in result.output
+    assert "mode=use-existing" in result.output
 
 
 def test_dub_run_use_existing_requires_translated_srt(runner, tmp_path):

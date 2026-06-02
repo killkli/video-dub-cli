@@ -189,12 +189,29 @@ def clean(project_dir, keep_source, stage):
     click.echo(f"clean complete: project={project_dir} stage={stage}")
 
 
+def _validate_translated_subtitle_contract(project_dir: Path, state) -> tuple[bool, str]:
+    mode = state.input.get("translate_mode") or "delegate"
+    translate_stage = state.stages.get("04_translate")
+    translate_status = translate_stage.status if translate_stage else "unknown"
+    zh_srt = project_dir / "05_translated_srt" / "video.zhtw.srt"
+
+    requires_translated_srt = translate_status == "done" and mode in {"delegate", "use-existing"}
+
+    if requires_translated_srt and not zh_srt.exists():
+        return False, (
+            "translated subtitle required but missing: "
+            f"mode={mode} translate_status={translate_status} path={zh_srt}"
+        )
+
+    return True, f"mode={mode} translate_status={translate_status}"
+
+
 @main.command()
 @click.option("--project-dir", required=True, type=click.Path(exists=True, path_type=Path))
 def validate(project_dir):
     """Validate project structure and outputs."""
     missing = []
-    for rel in ["01_raw_video", "02_stems", "03_asr", "04_ref_audio", "05_translate", "06_tts_wav", "07_final", ".dub"]:
+    for rel in ["01_raw_video", "02_stems", "03_asr", "04_ref_audio", "05_translate", "05_translated_srt", "06_tts_wav", "07_final", ".dub"]:
         if not (project_dir / rel).exists():
             missing.append(rel)
     if missing:
@@ -205,4 +222,11 @@ def validate(project_dir):
         stage_count = len(state.stages)
     except FileNotFoundError:
         stage_count = 0
-    click.echo(f"validate ok: project={project_dir} stages={stage_count}")
+        click.echo(f"validate ok: project={project_dir} stages={stage_count} mode=unknown")
+        return
+
+    ok, detail = _validate_translated_subtitle_contract(project_dir, state)
+    if not ok:
+        raise click.ClickException(f"validate failed: project={project_dir} {detail}")
+
+    click.echo(f"validate ok: project={project_dir} stages={stage_count} {detail}")
