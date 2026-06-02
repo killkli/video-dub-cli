@@ -1,4 +1,5 @@
-# Example config: English to Chinese (Simplified)
+# Backward-compatible alias of the canonical delegate example.
+# Preferred file: config_delegate_en2zh.yaml
 # Usage: cp config_en2zh.yaml ~/.config/dub/config.yaml, then edit paths
 
 paths:
@@ -6,7 +7,15 @@ paths:
   omnivoice_python: /path/to/omnivoice-python
   skills_dir: /path/to/video-dubbing-pipeline/scripts
   dub_root: ~/.hermes
+  # Legacy compatibility only: standalone CLI translation now uses translation.provider/model below.
   translation_skill: /path/to/subtitle_translation.py
+
+translation:
+  provider: gemini
+  model: gemini-2.5-flash
+  api_env_var: GOOGLE_API_KEY
+  temperature: 0.2
+  mode: delegate
 
 defaults:
   source_lang: en

@@ -1,13 +1,21 @@
-# Example config: Japanese to Chinese (Traditional)
+# Canonical Japanese -> Chinese example.
 # Usage: cp config_ja2zh.yaml ~/.config/dub/config.yaml, then edit paths
-# Note: ja uses VoxCPM TTS backend (not OmniVoice)
+# Note: ja uses the Japanese/Vox route in downstream scripts; this file keeps the same schema as the CLI.
 
 paths:
   qwenasr_cli: /path/to/qwenasr-mlx
   omnivoice_python: /path/to/voxcpm-python   # VoxCPM for ja
   skills_dir: /path/to/video-dubbing-pipeline/scripts
   dub_root: ~/.hermes
+  # Legacy compatibility only: standalone CLI translation now uses translation.provider/model below.
   translation_skill: /path/to/subtitle_translation.py
+
+translation:
+  provider: gemini
+  model: gemini-2.5-flash
+  api_env_var: GOOGLE_API_KEY
+  temperature: 0.2
+  mode: delegate
 
 defaults:
   source_lang: ja

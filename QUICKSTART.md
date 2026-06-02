@@ -21,13 +21,15 @@ dub --help
 
 ### Step 1：準備設定檔
 
+先建立設定目錄，並複製 canonical example：
+
 ```bash
 mkdir -p ~/.config/dub/
-cp examples/config_en2zh.yaml ~/.config/dub/config.yaml
+cp examples/config_delegate_en2zh.yaml ~/.config/dub/config.yaml
 vim ~/.config/dub/config.yaml   # 修改 paths（見下方）
 ```
 
-`config_en2zh.yaml` 需要修改的 paths：
+`config_delegate_en2zh.yaml` 需要確認的重點：
 ```yaml
 paths:
   qwenasr_cli: /path/to/qwenasr-mlx
@@ -35,6 +37,13 @@ paths:
   skills_dir: /path/to/video-dubbing-pipeline/scripts
   dub_root: ~/.hermes
   translation_skill: /path/to/subtitle_translation.py
+
+translation:
+  provider: gemini
+  model: gemini-2.5-flash
+  api_env_var: GOOGLE_API_KEY
+  temperature: 0.2
+  mode: delegate
 ```
 
 ### Step 2：執行配音
@@ -91,8 +100,9 @@ cp examples/config_ja2zh.yaml ~/.config/dub/config.yaml
 dub run anime.mp4 --source-lang ja --target-lang zh
 ```
 
-### 使用已翻譯的 SRT（跳過翻譯 stage）
+### 使用已翻譯的 SRT（`use-existing` route）
 ```bash
+cp examples/config_use_existing_en2zh.yaml ~/.config/dub/config.yaml
 dub run talk.mp4 --source-lang en --target-lang zh \
   --translate-mode use-existing \
   --translated-srt /path/to/translated.srt

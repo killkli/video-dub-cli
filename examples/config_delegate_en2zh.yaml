@@ -1,8 +1,6 @@
-# Backward-compatible alias of the canonical use-existing example.
-# Preferred file: config_use_existing_en2zh.yaml
-# Usage: cp config_with_translated_srt.yaml ~/.config/dub/config.yaml, then edit paths
-# Then run: dub run video.mp4 --source-lang en --target-lang zh \
-#   --translate-mode use-existing --translated-srt /path/to/translated.srt
+# Canonical example: delegate translation route (English -> Chinese)
+# Usage: cp examples/config_delegate_en2zh.yaml ~/.config/dub/config.yaml
+# Then run: dub run video.mp4 --source-lang en --target-lang zh
 
 paths:
   qwenasr_cli: /path/to/qwenasr-mlx
@@ -17,7 +15,7 @@ translation:
   model: gemini-2.5-flash
   api_env_var: GOOGLE_API_KEY
   temperature: 0.2
-  mode: use-existing
+  mode: delegate
 
 defaults:
   source_lang: en
@@ -38,8 +36,3 @@ logging:
   level: INFO
   json_logs: false
   progress: rich
-
-# Example CLI usage with this config:
-#   dub run my_talk.mp4 --source-lang en --target-lang zh \
-#     --translate-mode use-existing \
-#     --translated-srt ~/Downloads/talk.zhtw.srt

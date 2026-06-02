@@ -70,8 +70,8 @@ dub --help
 ### 第一次跑
 
 ```bash
-# 1. 複製並修改設定檔
-cp examples/config_en2zh.yaml ~/.config/dub/config.yaml
+# 1. 複製並修改設定檔（推薦使用 canonical examples）
+cp examples/config_delegate_en2zh.yaml ~/.config/dub/config.yaml
 vim ~/.config/dub/config.yaml   # 修改 paths（如 qwenasr_cli、omnivoice_python）
 
 # 2A. 最推薦：已有外部翻譯 SRT
@@ -237,6 +237,8 @@ video-dub-cli/
 │   └── fixtures/
 │       └── test_short.mp4      # 30s 英文片（既有測試素材）
 ├── examples/
+│   ├── config_delegate_en2zh.yaml
+│   ├── config_use_existing_en2zh.yaml
 │   ├── config_en2zh.yaml
 │   ├── config_ja2zh.yaml
 │   └── config_with_translated_srt.yaml
@@ -260,7 +262,14 @@ paths:
   omnivoice_python: /path/to/OmniVoice/.venv/bin/python3
   skills_dir: /path/to/video-dubbing-pipeline/scripts
   dub_root: ~/.hermes                    # dub-{topic} 建在這底下
-  translation_skill: /path/to/subtitle_translation.py
+  translation_skill: /path/to/subtitle_translation.py   # legacy compatibility only
+
+translation:
+  provider: gemini
+  model: gemini-2.5-flash
+  api_env_var: GOOGLE_API_KEY
+  temperature: 0.2
+  mode: delegate
 
 defaults:
   source_lang: en
