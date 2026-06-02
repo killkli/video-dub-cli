@@ -1,16 +1,22 @@
 # video-dub-cli
 
-A resumable CLI workflow for translating and dubbing videos into Chinese.
+> Resumable CLI pipeline for translating and dubbing videos into Chinese.
 
 ```bash
 dub run talk.mp4 --source-lang en --target-lang zh
 ```
 
-`video-dub-cli` turns a multi-stage dubbing pipeline into a single operator-facing command with persistent project state, resumability, and explicit artifact contracts.
+`video-dub-cli` packages a multi-stage video-dubbing workflow into a single CLI entrypoint with persistent project state, resumability, and explicit artifact contracts.
 
-## What it does
+## Highlights
 
-Pipeline stages:
+- **Single entrypoint**: run the full workflow with `dub run`
+- **Resumable by design**: continue interrupted runs with `dub resume`
+- **Artifact-driven workflow**: each stage persists outputs on disk
+- **Operator-grade validation**: `status`, `clean`, and `validate` are built in
+- **Real pipeline stages**: stems → ASR → ref-audio → translation → TTS → final assembly
+
+## Pipeline
 
 1. Vocal/instrumental separation
 2. ASR transcription
@@ -19,24 +25,25 @@ Pipeline stages:
 5. TTS dubbing per segment
 6. Final MP4 assembly and mix
 
-The CLI stores artifacts on disk for every stage, so interrupted runs can continue with `dub resume` instead of restarting from scratch.
+Because every stage writes durable artifacts, the pipeline can resume from partial completion instead of restarting from zero.
 
-## Current status
+## Release status
 
-This repo is at **v0.1.0** and is usable as an **operator-grade CLI**.
+Current version: **v0.1.0**
 
-That means:
+This release is usable as an **operator-grade CLI**:
 - `dub run`, `dub resume`, `dub status`, `dub clean`, and `dub validate` are implemented
-- stage state is persisted to disk
-- the supported English→Chinese and Japanese→Chinese workflows have operator QA coverage
-- the tool is designed for real runs, not just a demo skeleton
+- stage state is stored in `.dub/state.json`
+- English→Chinese and Japanese→Chinese workflows have operator QA coverage
+- the repo is suitable for real runs, not just scaffold/demo usage
 
-It does **not** mean every arbitrary video will succeed with zero operator judgment. The current release expects the user to understand config, project artifacts, and translation mode selection.
+Current boundary:
+- this is not yet a zero-intervention consumer product for arbitrary input videos
+- users are still expected to understand config, artifacts, and translation mode choice
 
 ## Supported workflows
 
-### 1. Use an existing translated subtitle file
-Best when you already have a reviewed Chinese SRT.
+### Use an existing translated subtitle file
 
 ```bash
 dub run talk.mp4 \
@@ -46,19 +53,19 @@ dub run talk.mp4 \
   --translated-srt talk.zhtw.srt
 ```
 
-### 2. Let the CLI translate from English to Chinese
+### Let the CLI translate English to Chinese
 
 ```bash
 dub run talk.mp4 --source-lang en --target-lang zh
 ```
 
-### 3. Let the CLI translate from Japanese to Chinese
+### Let the CLI translate Japanese to Chinese
 
 ```bash
 dub run talk.mp4 --source-lang ja --target-lang zh
 ```
 
-### 4. Resume an interrupted project
+### Resume an interrupted run
 
 ```bash
 dub resume --project-dir ~/.hermes/dub-talk-YYYYMMDD-HHMMSS/
@@ -74,7 +81,7 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
-Verify:
+Verify installation:
 
 ```bash
 dub --help
@@ -82,25 +89,25 @@ dub --help
 
 ## Quick start
 
-### Step 1: prepare config
+### 1. Prepare config
 
-Start from one of the example configs:
+Start from a canonical example config:
 
 ```bash
 cp examples/config_delegate_en2zh.yaml ~/.config/dub/config.yaml
 ```
 
-Then edit the paths and tool settings to match your machine.
+Then edit tool paths and provider settings for your machine.
 
-### Step 2: run the pipeline
+### 2. Run the pipeline
 
 ```bash
 dub run /path/to/input/my_talk.mp4 --source-lang en --target-lang zh
 ```
 
-### Step 3: inspect output
+### 3. Inspect the final output
 
-Typical final output:
+Typical output location:
 
 ```text
 ~/.hermes/dub-my_talk-YYYYMMDD-HHMMSS/07_final/video_dubbed_stem.mp4
@@ -136,13 +143,13 @@ dub resume --project-dir <project-dir>
 dub status --project-dir <project-dir>
 ```
 
-### Clean partial artifacts
+### Clean
 
 ```bash
 dub clean --project-dir <project-dir>
 ```
 
-### Validate project structure
+### Validate
 
 ```bash
 dub validate --project-dir <project-dir>
@@ -177,7 +184,7 @@ Requires:
 
 ## Project layout
 
-A run creates a project directory with stage artifacts and state:
+A run creates a project directory like this:
 
 ```text
 dub-<topic>-<timestamp>/
@@ -195,24 +202,22 @@ This layout is the basis for resumability, validation, and recovery.
 
 ## Documentation
 
-Operator and handoff docs live in `docs/`:
-
+- `QUICKSTART.md`
+- `DESIGN.md`
 - `docs/operator-qa-supported-flow-2026-06-02.md`
 - `docs/operator-runbook.md`
 - `docs/release-handoff-checklist.md`
 - `docs/qa-matrix-en-ja-zh-2026-06-02.md`
-- `QUICKSTART.md`
-- `DESIGN.md`
 
 ## Testing
 
-Run the test suite:
+Run the main suite:
 
 ```bash
 pytest
 ```
 
-Run targeted integration coverage when needed:
+Run integration coverage when needed:
 
 ```bash
 pytest tests/integration -m integration
@@ -231,8 +236,6 @@ This CLI orchestrates external components. Depending on your config and workflow
 The repo includes the CLI and workflow logic; environment-specific provider/tool wiring is configured outside the package.
 
 ## Limitations
-
-Current release boundaries:
 
 - not every input video is guaranteed to work unattended
 - translation and TTS quality still depend on external provider/tool configuration
