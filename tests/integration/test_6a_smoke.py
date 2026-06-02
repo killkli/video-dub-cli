@@ -29,7 +29,7 @@ STAGE_DIRS = [
 
 
 @pytest.mark.integration
-def test_6a_smoke(tmp_path: Path) -> None:
+def test_6a_smoke(tmp_path: Path, fake_qwenasr_config: Path) -> None:
     """Smoke test: run the full pipeline on a 30s clip and verify outputs."""
 
     if not TEST_SHORT.exists():
@@ -49,6 +49,8 @@ def test_6a_smoke(tmp_path: Path) -> None:
             "zh",
             "--project-dir",
             str(project_dir),
+            "--config",
+            str(fake_qwenasr_config),
             "--yes",
         ],
         capture_output=True,

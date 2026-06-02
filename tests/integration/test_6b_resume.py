@@ -22,7 +22,7 @@ TEST_5MIN = FIXTURES / "test_5min.mp4"
 
 @pytest.mark.integration
 @pytest.mark.timeout(900)
-def test_6b_resume(tmp_path: Path) -> None:
+def test_6b_resume(tmp_path: Path, fake_qwenasr_config: Path) -> None:
     """Resume test: interrupt a 5min run, then resume and verify final output."""
 
     if not TEST_5MIN.exists():
@@ -42,6 +42,8 @@ def test_6b_resume(tmp_path: Path) -> None:
             "zh",
             "--project-dir",
             str(project_dir),
+            "--config",
+            str(fake_qwenasr_config),
             "--yes",
         ],
         stdout=subprocess.PIPE,
@@ -69,7 +71,7 @@ def test_6b_resume(tmp_path: Path) -> None:
 
     # --- Phase 3: Resume ---
     resume_result = subprocess.run(
-        ["dub", "resume", "--project-dir", str(project_dir)],
+        ["dub", "resume", "--project-dir", str(project_dir), "--config", str(fake_qwenasr_config)],
         capture_output=True,
         text=True,
         timeout=600,

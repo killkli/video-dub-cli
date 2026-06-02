@@ -17,7 +17,7 @@ TEST_SHORT = FIXTURES / "test_short.mp4"
 
 
 @pytest.mark.integration
-def test_6c_idempotency(tmp_path: Path) -> None:
+def test_6c_idempotency(tmp_path: Path, fake_qwenasr_config: Path) -> None:
     """Idempotency: delete a ref_audio, resume, verify targeted rebuild."""
 
     if not TEST_SHORT.exists():
@@ -37,6 +37,8 @@ def test_6c_idempotency(tmp_path: Path) -> None:
             "zh",
             "--project-dir",
             str(project_dir),
+            "--config",
+            str(fake_qwenasr_config),
             "--yes",
         ],
         capture_output=True,
@@ -66,7 +68,7 @@ def test_6c_idempotency(tmp_path: Path) -> None:
 
     # --- Phase 2: Resume ---
     resume_result = subprocess.run(
-        ["dub", "resume", "--project-dir", str(project_dir)],
+        ["dub", "resume", "--project-dir", str(project_dir), "--config", str(fake_qwenasr_config)],
         capture_output=True,
         text=True,
         timeout=600,

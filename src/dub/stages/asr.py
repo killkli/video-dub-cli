@@ -15,39 +15,49 @@ class AsrStage(Stage):
 
     def is_done(self, project_dir: Path) -> bool:
         srt_path = project_dir / "03_asr" / "video.srt"
-        if not srt_path.exists():
-            return False
-        # Verify non-empty
-        text = srt_path.read_text()
-        return len(text.strip()) > 50
+        return srt_path.exists()
 
     def run(self, project_dir: Path, config: DubConfig) -> StageState:
         state = StageState(name=self.name, status="running", started_at=now_iso())
         state.attempts = 1
 
-        log_file = project_dir / ".dub" / f"{self.name}.log"
-        vocals_wav = project_dir / "02_stems" / "video.vocals.wav"
+        input_video = project_dir / "01_raw_video" / "video.mp4"
         srt_out = project_dir / "03_asr" / "video.srt"
+        log_file = project_dir / ".dub" / f"{self.name}.log"
         cli = config.paths.qwenasr_cli
 
-        cmd = [
-            str(cli), "transcribe",
-            str(vocals_wav),
-            "--output", str(srt_out),
-        ]
+        srt_out.parent.mkdir(parents=True, exist_ok=True)
+        log_file.parent.mkdir(parents=True, exist_ok=True)
 
-        with open(log_file, "w") as fh:
+        cmd = [
+            str(cli),
+            "transcribe",
+            str(input_video),
+            "--output-format",
+            "srt",
+        ]
+        if config.defaults.source_lang:
+            cmd += ["--language", config.defaults.source_lang]
+
+        with open(srt_out, "w", encoding="utf-8") as out_fh, open(log_file, "w", encoding="utf-8") as log_fh:
             result = subprocess.run(
                 cmd,
-                stdout=fh,
-                stderr=subprocess.STDOUT,
+                stdout=out_fh,
+                stderr=log_fh,
+                text=True,
                 check=False,
             )
 
         if result.returncode != 0:
             state.status = "failed"
             state.finished_at = now_iso()
-            state.error = f"exit {result.returncode}"
+            state.error = f"qwenasr-mlx exited with code {result.returncode}; see {log_file}"
+            return state
+
+        if not srt_out.exists() or not srt_out.read_text(encoding="utf-8").strip():
+            state.status = "failed"
+            state.finished_at = now_iso()
+            state.error = f"qwenasr-mlx produced empty SRT; see {log_file}"
             return state
 
         state.artifacts = ["video.srt"]
