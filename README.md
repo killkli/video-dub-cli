@@ -18,6 +18,10 @@ dub run talk.mp4 --source-lang en --target-lang zh
 - **適合 operator / 開發者**：願意看 log、理解 project 結構、必要時使用 `resume` / `status`
 - **尚未承諾**：任意陌生片源都能零介入一次成功
 
+## QA / 交接文件
+
+- Operator QA 實跑記錄：`docs/operator-qa-supported-flow-2026-06-02.md`
+- Release / handoff checklist：`docs/release-handoff-checklist.md`
 
 ---
 
@@ -27,6 +31,7 @@ dub run talk.mp4 --source-lang en --target-lang zh
 - [安裝](#安裝)
 - [快速上手](#快速上手)
 - [完整指令](#完整指令)
+- [QA / 交接文件](#qa--交接文件)
 - [架構](#架構)
 - [設定檔](#設定檔)
 - [Stage 流程](#stage-流程)
@@ -195,6 +200,18 @@ dub validate --project-dir ~/.hermes/dub-talk-YYYYMMDD-HHMMSS/
 ```
 
 檢查：01 有 video.mp4、`.dub/state.json` 格式正確、所有 ref_audio 與 tts_wav 數量一致、最終 MP4 可被 ffprobe 讀。
+
+---
+
+## QA / 交接文件
+
+- `docs/operator-qa-supported-flow-2026-06-02.md`
+  - 真實跑過一次 supported single-command flow 的 operator 記錄
+  - 包含實際指令、stdout、state 契約與產物路徑
+
+- `docs/release-handoff-checklist.md`
+  - 收尾 / 交接時應逐項確認的 checklist
+  - 用來避免 README 說法、example、state 契約與實際實作再次漂移
 
 ---
 
