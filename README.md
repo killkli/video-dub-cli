@@ -68,7 +68,7 @@ dub run talk.mp4 --source-lang ja --target-lang zh
 ### Resume an interrupted run
 
 ```bash
-dub resume --project-dir ~/.hermes/dub-talk-YYYYMMDD-HHMMSS/
+dub resume --project-dir /path/to/dub-project/
 ```
 
 ## Installation
@@ -94,10 +94,10 @@ dub --help
 Start from a canonical example config:
 
 ```bash
-cp examples/config_delegate_en2zh.yaml ~/.config/dub/config.yaml
+cp examples/config_delegate_en2zh.yaml /path/to/config.yaml
 ```
 
-Then edit tool paths and provider settings for your machine.
+Then replace all `/path/to/...` placeholders with the real paths for your own machine.
 
 ### 2. Run the pipeline
 
@@ -110,7 +110,7 @@ dub run /path/to/input/my_talk.mp4 --source-lang en --target-lang zh
 Typical output location:
 
 ```text
-~/.hermes/dub-my_talk-YYYYMMDD-HHMMSS/07_final/video_dubbed_stem.mp4
+/path/to/dub-project/07_final/video_dubbed_stem.mp4
 ```
 
 ## Core commands

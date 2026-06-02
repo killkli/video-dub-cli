@@ -25,17 +25,17 @@ dub --help
 
 ```bash
 mkdir -p ~/.config/dub/
-cp examples/config_delegate_en2zh.yaml ~/.config/dub/config.yaml
-vim ~/.config/dub/config.yaml   # 修改 paths（見下方）
+cp examples/config_delegate_en2zh.yaml /path/to/config.yaml
+vim /path/to/config.yaml   # 修改 paths（見下方）
 ```
 
-`config_delegate_en2zh.yaml` 需要確認的重點：
+`config_delegate_en2zh.yaml` 是公開參考模板。你需要把其中所有 `/path/to/...` 佔位路徑改成你自己機器上的實際路徑：
 ```yaml
 paths:
   qwenasr_cli: /path/to/qwenasr-mlx
   omnivoice_python: /path/to/omnivoice-python
   skills_dir: /path/to/video-dubbing-pipeline/scripts
-  dub_root: ~/.hermes
+  dub_root: /path/to/dub-root
   translation_skill: /path/to/subtitle_translation.py
 
 translation:
@@ -71,16 +71,16 @@ dub run /path/to/input/my_talk.mp4 \
 
 ```bash
 # 查看每個 stage 的狀態
-dub status --project-dir ~/.hermes/dub-my_talk-<timestamp>/
+dub status --project-dir /path/to/dub-project/
 
 # 驗證專案結構與最終輸出
-dub validate --project-dir ~/.hermes/dub-my_talk-<timestamp>/
+dub validate --project-dir /path/to/dub-project/
 ```
 
 ### Step 4：找到輸出
 
 ```
-~/.hermes/dub-<topic>-<timestamp>/07_final/video_dubbed_stem.mp4
+/path/to/dub-project/07_final/video_dubbed_stem.mp4
 ```
 
 ---
@@ -88,7 +88,7 @@ dub validate --project-dir ~/.hermes/dub-my_talk-<timestamp>/
 ## 中斷後繼續
 
 ```bash
-dub resume --project-dir ~/.hermes/dub-my_talk-<timestamp>/
+dub resume --project-dir /path/to/dub-project/
 ```
 
 ---
@@ -97,7 +97,7 @@ dub resume --project-dir ~/.hermes/dub-my_talk-<timestamp>/
 
 ```bash
 # 刪除所有 stage 產物，重新來過
-dub clean --project-dir ~/.hermes/dub-my_talk-<timestamp>/
+dub clean --project-dir /path/to/dub-project/
 
 # 再跑一次
 dub run /path/to/input/my_talk.mp4 --source-lang en --target-lang zh

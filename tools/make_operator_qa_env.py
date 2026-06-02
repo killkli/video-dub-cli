@@ -168,7 +168,7 @@ paths:
   omnivoice_python: /usr/bin/python3
   skills_dir: {SKILLS}
   translation_skill: {translator}
-  dub_root: ~/.hermes
+  dub_root: /path/to/dub-root
 
 defaults:
   source_lang: en

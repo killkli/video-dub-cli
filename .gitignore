@@ -11,3 +11,7 @@ htmlcov/
 *.swo
 .DS_Store
 .tmp_operator_qa/
+local/
+*.local.yaml
+*.private.yaml
+.tmp_release_notes_v010.md

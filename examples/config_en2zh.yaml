@@ -1,12 +1,12 @@
 # Backward-compatible alias of the canonical delegate example.
 # Preferred file: config_delegate_en2zh.yaml
-# Usage: cp config_en2zh.yaml ~/.config/dub/config.yaml, then edit paths
+# Usage: copy this file to your local config path, then replace all /path/to/... placeholders with your own machine-specific paths.
 
 paths:
   qwenasr_cli: /path/to/qwenasr-mlx
   omnivoice_python: /path/to/omnivoice-python
   skills_dir: /path/to/video-dubbing-pipeline/scripts
-  dub_root: ~/.hermes
+  dub_root: /path/to/dub-root
   # Legacy compatibility only: standalone CLI translation now uses translation.provider/model below.
   translation_skill: /path/to/subtitle_translation.py
 

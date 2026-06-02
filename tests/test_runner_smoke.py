@@ -39,6 +39,16 @@ def mock_external_cli_for_smoke(monkeypatch):
                 stderr.write("mocked qwenasr ok")
             return subprocess.CompletedProcess(cmd, 0)
 
+        if any("dubbing_extract_ref.py" in s for s in cmd_strs):
+            out_dir = Path(cmd_strs[-1].rstrip("/"))
+            out_dir.mkdir(parents=True, exist_ok=True)
+            srt_path = Path(cmd_strs[-2])
+            text = srt_path.read_text(encoding="utf-8", errors="replace").replace("\r\n", "\n").replace("\r", "\n")
+            blocks = [b for b in text.split("\n\n") if b.strip()]
+            for i, _ in enumerate(blocks, 1):
+                (out_dir / f"line_{i}_ref.wav").write_bytes(b"\\x00" * 4096)
+            return subprocess.CompletedProcess(cmd, 0)
+
         if any("dubbing_batch_tts.py" in s for s in cmd_strs) or any("dubbing_batch_tts_vox.py" in s for s in cmd_strs):
             out_idx = cmd_strs.index("--out-dir")
             out_dir = Path(cmd_strs[out_idx + 1])
@@ -93,8 +103,35 @@ def project_dir(tmp_path):
 
 
 @pytest.fixture
-def config():
-    return config_module.DubConfig()
+def config(tmp_path):
+    fake_bin = tmp_path / "bin"
+    fake_scripts = tmp_path / "scripts"
+    fake_root = tmp_path / "dub_root_runtime"
+    fake_bin.mkdir(parents=True, exist_ok=True)
+    fake_scripts.mkdir(parents=True, exist_ok=True)
+    fake_root.mkdir(parents=True, exist_ok=True)
+
+    for rel in [
+        fake_bin / "qwenasr-mlx",
+        fake_bin / "omnivoice-python",
+        fake_scripts / "subtitle_translation.py",
+        fake_scripts / "dubbing_extract_ref.py",
+        fake_scripts / "dubbing_batch_tts.py",
+        fake_scripts / "dubbing_batch_tts_vox.py",
+        fake_scripts / "dubbing_assemble_loudnorm.py",
+        fake_scripts / "dubbing_remix.py",
+    ]:
+        rel.write_text("#!/usr/bin/env python3\n")
+
+    return config_module.DubConfig.model_validate({
+        "paths": {
+            "qwenasr_cli": str(fake_bin / "qwenasr-mlx"),
+            "omnivoice_python": str(fake_bin / "omnivoice-python"),
+            "skills_dir": str(fake_scripts),
+            "translation_skill": str(fake_scripts / "subtitle_translation.py"),
+            "dub_root": str(fake_root),
+        }
+    })
 
 
 # ── tests ─────────────────────────────────────────────────────────────────────

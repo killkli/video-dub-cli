@@ -19,13 +19,30 @@ def tmp_path(tmp_path_factory):
 @pytest.fixture
 def minimal_config_yaml(tmp_path):
     """A minimal valid YAML config with all required paths."""
-    content = """
+    fake_bin = tmp_path / "bin"
+    fake_scripts = tmp_path / "scripts"
+    fake_root = tmp_path / "dub-root"
+    fake_bin.mkdir(parents=True, exist_ok=True)
+    fake_scripts.mkdir(parents=True, exist_ok=True)
+    fake_root.mkdir(parents=True, exist_ok=True)
+
+    for rel in [
+        fake_bin / "qwenasr-mlx",
+        fake_bin / "omnivoice-python",
+        fake_scripts / "subtitle_translation.py",
+        fake_scripts / "dubbing_extract_ref.py",
+        fake_scripts / "dubbing_assemble_loudnorm.py",
+        fake_scripts / "dubbing_remix.py",
+    ]:
+        rel.write_text("#!/usr/bin/env python3\n")
+
+    content = f"""
 paths:
-  qwenasr_cli: /path/to/qwenasr-mlx
-  omnivoice_python: /path/to/omnivoice-python
-  skills_dir: /path/to/video-dubbing-pipeline/scripts
-  dub_root: ~/.hermes
-  translation_skill: /path/to/subtitle_translation.py
+  qwenasr_cli: {fake_bin / 'qwenasr-mlx'}
+  omnivoice_python: {fake_bin / 'omnivoice-python'}
+  skills_dir: {fake_scripts}
+  dub_root: {fake_root}
+  translation_skill: {fake_scripts / 'subtitle_translation.py'}
 
 defaults:
   source_lang: en

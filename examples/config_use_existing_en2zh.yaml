@@ -1,5 +1,5 @@
 # Canonical example: use an already-translated SRT (English -> Chinese)
-# Usage: cp examples/config_use_existing_en2zh.yaml ~/.config/dub/config.yaml
+# Usage: cp examples/config_use_existing_en2zh.yaml /path/to/config.yaml
 # Then run: dub run video.mp4 --source-lang en --target-lang zh \
 #   --translate-mode use-existing --translated-srt /path/to/translated.srt
 
@@ -7,7 +7,7 @@ paths:
   qwenasr_cli: /path/to/qwenasr-mlx
   omnivoice_python: /path/to/omnivoice-python
   skills_dir: /path/to/video-dubbing-pipeline/scripts
-  dub_root: ~/.hermes
+  dub_root: /path/to/dub-root
   # Legacy compatibility only: standalone CLI translation now uses translation.provider/model below.
   translation_skill: /path/to/subtitle_translation.py
 

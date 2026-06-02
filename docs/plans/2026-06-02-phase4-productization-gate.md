@@ -82,8 +82,8 @@ The `dub` CLI is the only operator-facing surface. P4-T1 owns this contract.
 dub run VIDEO [options]
   --source-lang / --src         (en | ja)         default: config.defaults.source_lang
   --target-lang / --tgt         (zh | zhtw)       default: config.defaults.target_lang
-  --project-dir                 path             default: ~/.hermes/dub-<topic>-<ts>/
-  --config                      path             default: ~/.config/dub/config.yaml
+  --project-dir                 path             default: /path/to/dub-root/dub-<topic>-<ts>/
+  --config                      path             default: /path/to/config.yaml
   --translate-mode              delegate|skip|use-existing   default: delegate
   --translated-srt              path             required iff --translate-mode use-existing
   --vocal-gain                  float dB

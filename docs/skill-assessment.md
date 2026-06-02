@@ -82,11 +82,11 @@
 | 測試計畫簡單，可以快速驗證 |
 
 **風險**：
-- 使用者需要正確設定 `~/.config/dub/config.yaml`（paths 在不同機器不同）
+- 使用者需要正確設定 `/path/to/config.yaml`（paths 在不同機器不同）
 - skill 裡需要說明如何修改 paths，否則第一次觸發容易失敗
 
 **配套動作**：
-1. 將 `video-dub-cli` skill 文件寫入 `~/.hermes/profiles/<profile>/skills/`（Skill author skill 可用）
+1. 將 `video-dub-cli` skill 文件寫入 `/path/to/dub-root/profiles/<profile>/skills/`（Skill author skill 可用）
 2. 測試完成後更新 DESIGN.md §13 的狀態
 
 ---

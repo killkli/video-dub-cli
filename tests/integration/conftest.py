@@ -236,7 +236,7 @@ paths:
   omnivoice_python: /usr/bin/python3
   skills_dir: {skills_dir}
   translation_skill: /bin/true
-  dub_root: ~/.hermes
+  dub_root: /path/to/dub-root
 
 translation:
   provider: mock

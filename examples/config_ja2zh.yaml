@@ -1,12 +1,12 @@
 # Canonical Japanese -> Chinese example.
-# Usage: cp config_ja2zh.yaml ~/.config/dub/config.yaml, then edit paths
+# Usage: cp config_ja2zh.yaml /path/to/config.yaml, then edit paths
 # Note: ja uses the Japanese/Vox route in downstream scripts; this file keeps the same schema as the CLI.
 
 paths:
   qwenasr_cli: /path/to/qwenasr-mlx
   omnivoice_python: /path/to/voxcpm-python   # VoxCPM for ja
   skills_dir: /path/to/video-dubbing-pipeline/scripts
-  dub_root: ~/.hermes
+  dub_root: /path/to/dub-root
   # Legacy compatibility only: standalone CLI translation now uses translation.provider/model below.
   translation_skill: /path/to/subtitle_translation.py
 

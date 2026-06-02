@@ -94,11 +94,11 @@ class DubConfig(BaseModel):
 
 
 DEFAULT_PATHS = {
-    "qwenasr_cli": "/path/to/qwenasr-mlx",
-    "omnivoice_python": "/path/to/omnivoice-python",
-    "skills_dir": "/path/to/video-dubbing-pipeline/scripts",
-    "translation_skill": "/path/to/subtitle_translation.py",
-    "dub_root": str(Path.home() / ".hermes"),
+    "qwenasr_cli": str(Path.home() / ".hermes" / "projects" / "qwenasr-mlx-cli" / ".venv" / "bin" / "qwenasr-mlx"),
+    "omnivoice_python": str(Path.home() / "Dev" / "OmniVoice" / ".venv" / "bin" / "python3"),
+    "skills_dir": str(Path.home() / ".hermes" / "skills" / "media" / "video-dubbing-pipeline" / "scripts"),
+    "translation_skill": str(Path.home() / ".hermes" / "skills" / "media" / "subtitle-translation" / "subtitle_translation.py"),
+    "dub_root": str(Path.home() / "video-dub-cli-runs"),
 }
 
 
@@ -112,7 +112,7 @@ def _normalize_raw(raw: dict | None) -> dict:
 
 
 def load_config(path: Path | str | None = None) -> DubConfig:
-    search = [Path(path)] if path else [Path("~/.config/dub/config.yaml").expanduser()]
+    search = [Path(path)] if path else [Path("/path/to/config.yaml").expanduser()]
     for p in search:
         if p.exists():
             try:
