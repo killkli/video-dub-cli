@@ -39,6 +39,18 @@ def mock_external_cli_for_smoke(monkeypatch):
                 stderr.write("mocked qwenasr ok")
             return subprocess.CompletedProcess(cmd, 0)
 
+        if any("dubbing_batch_tts.py" in s for s in cmd_strs) or any("dubbing_batch_tts_vox.py" in s for s in cmd_strs):
+            out_idx = cmd_strs.index("--out-dir")
+            out_dir = Path(cmd_strs[out_idx + 1])
+            out_dir.mkdir(parents=True, exist_ok=True)
+            srt_flag = "--en-srt" if "--en-srt" in cmd_strs else "--ja-srt"
+            srt_path = Path(cmd_strs[cmd_strs.index(srt_flag) + 1])
+            text = srt_path.read_text(encoding="utf-8", errors="replace").replace("\r\n", "\n").replace("\r", "\n")
+            blocks = [b for b in text.split("\n\n") if b.strip()]
+            for i, _ in enumerate(blocks, 1):
+                (out_dir / f"line_{i}_tts.wav").write_bytes(b"\\x00" * 4096)
+            return subprocess.CompletedProcess(cmd, 0)
+
         if any("dubbing_assemble_loudnorm.py" in s for s in cmd_strs):
             save_idx = cmd_strs.index("--save-normalized-wav")
             norm_path = Path(cmd_strs[save_idx + 1])
