@@ -24,3 +24,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "integration: integration tests that call dub CLI with real video fixtures (slow, requires ffmpeg + dub deps)",
+]
+addopts = "-m 'not integration' --ignore=tests/integration"
