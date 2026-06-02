@@ -141,26 +141,14 @@ class ASRStage(Stage):
 # so existing import paths (dub.stages.base.RefAudioStage) keep working.
 from dub.stages.ref_audio import RefAudioStage  # noqa: E402,F401
 
+# TtsStage is defined canonically in dub.stages.tts (real wire:
+# dubbing_batch_tts.py for en→OmniVoice, dubbing_batch_tts_vox.py for
+# ja→VoxCPM). We re-export under both spellings (TTSStage / TtsStage) so
+# existing import paths (dub.stages.base.TTSStage) keep working.
+from dub.stages.tts import TtsStage  # noqa: E402,F401
 
-class TTSStage(Stage):
-    name = "05_tts"
-
-    def is_done(self, project_dir: Path) -> bool:
-        d = project_dir / "06_tts_wav"
-        return bool(d.exists() and list(d.glob("line_*_tts.wav")))
-
-    def run(self, project_dir: Path, config: DubConfig) -> StageState:
-        raw_video = project_dir / "01_raw_video" / "video.mp4"
-        duration = _video_duration(raw_video)
-        d = project_dir / "06_tts_wav"
-        d.mkdir(parents=True, exist_ok=True)
-        outputs: list[str] = []
-        for idx in range(1, 4):
-            wav = d / f"line_{idx}_tts.wav"
-            if not wav.exists():
-                _ensure_silence_wav(wav, min(duration, 1.0))
-            outputs.append(wav.name)
-        return self.mark_done(artifacts=outputs, output_dir="06_tts_wav")
+# Backwards-compat alias (legacy code referenced TTSStage in some test paths).
+TTSStage = TtsStage
 
 
 class AssembleStage(Stage):
