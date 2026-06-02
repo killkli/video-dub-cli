@@ -21,6 +21,48 @@ from dub import project as project_module
 FIXTURE = Path(__file__).parent / "fixtures" / "test_short.mp4"
 
 
+@pytest.fixture(autouse=True)
+def mock_external_cli_for_smoke(monkeypatch):
+    real_run = subprocess.run
+
+    def wrapped_run(cmd, *args, **kwargs):
+        cmd_list = list(cmd) if isinstance(cmd, (list, tuple)) else [cmd]
+        cmd0 = cmd_list[0] if cmd_list else ""
+        cmd_strs = [str(x) for x in cmd_list]
+
+        if isinstance(cmd0, str) and "qwenasr-mlx" in cmd0:
+            stdout = kwargs.get("stdout")
+            stderr = kwargs.get("stderr")
+            if stdout is not None:
+                stdout.write("1\n00:00:00,000 --> 00:00:01,000\nHello from mocked ASR.\n")
+            if stderr is not None:
+                stderr.write("mocked qwenasr ok")
+            return subprocess.CompletedProcess(cmd, 0)
+
+        if any("dubbing_assemble_loudnorm.py" in s for s in cmd_strs):
+            save_idx = cmd_strs.index("--save-normalized-wav")
+            norm_path = Path(cmd_strs[save_idx + 1])
+            norm_path.parent.mkdir(parents=True, exist_ok=True)
+            norm_path.write_bytes(b"\\x00" * 4096)
+
+            out_idx = cmd_strs.index("--output")
+            out_path = Path(cmd_strs[out_idx + 1])
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_bytes(b"\\x00" * 4096)
+            return subprocess.CompletedProcess(cmd, 0)
+
+        if any("dubbing_remix.py" in s for s in cmd_strs):
+            out_idx = cmd_strs.index("--output")
+            out_path = Path(cmd_strs[out_idx + 1])
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_bytes(b"\\x00" * 4096)
+            return subprocess.CompletedProcess(cmd, 0)
+
+        return real_run(cmd, *args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", wrapped_run)
+
+
 @pytest.fixture
 def project_dir(tmp_path):
     """Create a minimal project with the test fixture."""
