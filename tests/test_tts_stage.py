@@ -149,16 +149,17 @@ def test_run_routes_en_to_omnivoice_script(tmp_path, monkeypatch):
     assert cmd[6:8] == ["--ref-dir", str(proj / "04_ref_audio")]
     assert cmd[8:10] == ["--out-dir", str(proj / "06_tts_wav")]
     assert len(cmd) == 10
-    # No --ja-srt leaked in for the en route.
+    # No --ja-srt / --project-dir leaked in for the en route.
     assert "--ja-srt" not in cmd
+    assert "--project-dir" not in cmd
 
 
 def test_run_routes_ja_to_vox_cpm_script_with_ja_srt_flag(tmp_path, monkeypatch):
-    """ja → dubbing_batch_tts_vox.py with --ja-srt (NOT --en-srt).
+    """ja → dubbing_batch_tts_vox.py with --project-dir + --ja-srt.
 
-    This is the bug fix vs. the previous draft tts.py: the VoxCPM script
-    expects --ja-srt, not --en-srt. A real VoxCPM run with --en-srt would
-    fail (or worse, silently send the wrong field to the server).
+    The real VoxCPM script requires --project-dir in addition to the
+    explicit SRT / ref / out flags. A stage that omits it will fail before
+    any TTS work starts.
     """
     proj = _make_project(tmp_path)
     seen: dict = {}
@@ -175,8 +176,12 @@ def test_run_routes_ja_to_vox_cpm_script_with_ja_srt_flag(tmp_path, monkeypatch)
     assert state.status == "done"
     cmd = seen["cmd"]
     assert cmd[1] == str(cfg.paths.skills_dir / "dubbing_batch_tts_vox.py")
-    assert cmd[4] == "--ja-srt"
-    assert cmd[5] == str(proj / "03_asr" / "video.srt")
+    assert cmd[2:4] == ["--project-dir", str(proj)]
+    assert cmd[4:6] == ["--zh-srt", str(proj / "05_translated_srt" / "video.zhtw.srt")]
+    assert cmd[6] == "--ja-srt"
+    assert cmd[7] == str(proj / "03_asr" / "video.srt")
+    assert cmd[8:10] == ["--ref-dir", str(proj / "04_ref_audio")]
+    assert cmd[10:12] == ["--out-dir", str(proj / "06_tts_wav")]
     # No --en-srt leaked in for the ja route.
     assert "--en-srt" not in cmd
 

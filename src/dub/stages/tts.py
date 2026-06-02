@@ -52,15 +52,15 @@ from dub.stages.ref_audio import _count_srt_cues  # noqa: E402
 # a 200-byte placeholder the same way the script would on a re-run.
 _TTS_MIN_BYTES = 1000
 
-# Routes: source_lang → (script, source_srt_flag)
+# Routes: source_lang → (script, source_srt_flag, needs_project_dir)
 #
 # OmniVoice (en) uses --en-srt because the script was originally written
-# for an English source. VoxCPM (ja) uses --ja-srt — the script's own
-# default is also 02_asr/video.srt, but we pass it explicitly so we don't
-# depend on CWD. Any other source_lang defaults to OmniVoice for safety.
-_ROUTES: dict[str, tuple[str, str]] = {
-    "en": ("dubbing_batch_tts.py", "--en-srt"),
-    "ja": ("dubbing_batch_tts_vox.py", "--ja-srt"),
+# for an English source. VoxCPM (ja) uses --ja-srt and additionally
+# requires --project-dir for its own path resolution / defaults. Any other
+# source_lang defaults to OmniVoice for safety.
+_ROUTES: dict[str, tuple[str, str, bool]] = {
+    "en": ("dubbing_batch_tts.py", "--en-srt", False),
+    "ja": ("dubbing_batch_tts_vox.py", "--ja-srt", True),
 }
 
 
@@ -104,14 +104,15 @@ class TtsStage(Stage):
                 return False
         return True
 
-    def _resolve_route(self, source_lang: str, skills_dir: Path) -> tuple[Path, str]:
-        """Return (script_path, source_srt_flag) for the given source_lang.
+    def _resolve_route(self, source_lang: str, skills_dir: Path) -> tuple[Path, str, bool]:
+        """Return (script_path, source_srt_flag, needs_project_dir) for the
+        given source_lang.
 
         Unknown source_langs fall back to the OmniVoice (en) route so the
         pipeline still attempts something rather than failing closed.
         """
-        script_name, src_flag = _ROUTES.get(source_lang, _ROUTES["en"])
-        return skills_dir / script_name, src_flag
+        script_name, src_flag, needs_project_dir = _ROUTES.get(source_lang, _ROUTES["en"])
+        return skills_dir / script_name, src_flag, needs_project_dir
 
     def run(self, project_dir: Path, config: DubConfig) -> StageState:
         state = StageState(
@@ -137,7 +138,7 @@ class TtsStage(Stage):
         tts_dir.mkdir(parents=True, exist_ok=True)
         log_file.parent.mkdir(parents=True, exist_ok=True)
 
-        script, src_flag = self._resolve_route(
+        script, src_flag, needs_project_dir = self._resolve_route(
             config.defaults.source_lang, config.paths.skills_dir
         )
         if not script.exists():
@@ -153,14 +154,15 @@ class TtsStage(Stage):
         # doesn't import torch, so a python with gradio_client also works
         # fine, and pinning one interpreter keeps the stage deterministic.
         py = config.paths.omnivoice_python
-        cmd = [
-            str(py),
-            str(script),
+        cmd = [str(py), str(script)]
+        if needs_project_dir:
+            cmd.extend(["--project-dir", str(project_dir)])
+        cmd.extend([
             "--zh-srt", str(zh_srt),
             src_flag, str(asr_srt),
             "--ref-dir", str(ref_dir),
             "--out-dir", str(tts_dir),
-        ]
+        ])
 
         with open(log_file, "w", encoding="utf-8") as log_fh:
             result = subprocess.run(
