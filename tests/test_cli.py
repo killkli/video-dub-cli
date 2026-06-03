@@ -27,6 +27,7 @@ def test_dub_help_lists_one_shot_aliases(runner):
     assert result.exit_code == 0
     assert "en2zh" in result.output
     assert "ja2zh" in result.output
+    assert "run" in result.output
 
 
 def test_dub_en2zh_help_exits_zero(runner):

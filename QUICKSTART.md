@@ -118,14 +118,19 @@ translation:
 
 ### Step 2：跑配音
 
-**英文 → 中文（delegate mode，CLI 自己翻譯）**
+**英文 → 中文（一鍵 operator flow；delegate mode）**
 ```bash
-uv run dub run /path/to/input/my_talk.mp4 --source-lang en --target-lang zh
+uv run dub en2zh /path/to/input/my_talk.mp4
 ```
 
-**日文 → 中文（delegate mode）**
+**日文 → 中文（一鍵 operator flow；delegate mode）**
 ```bash
-uv run dub run /path/to/input/my_anime.mp4 --source-lang ja --target-lang zh
+uv run dub ja2zh /path/to/input/my_anime.mp4
+```
+
+**進階 / 底層入口（明確語言參數）**
+```bash
+uv run dub run /path/to/input/my_talk.mp4 --source-lang en --target-lang zh
 ```
 
 **已有外部翻譯字幕（use-existing mode）**
@@ -170,7 +175,7 @@ uv run dub resume --project-dir /path/to/dub-project/
 uv run dub clean --project-dir /path/to/dub-project/
 
 # 再跑一次
-uv run dub run /path/to/input/my_talk.mp4 --source-lang en --target-lang zh
+uv run dub en2zh /path/to/input/my_talk.mp4
 ```
 
 只重跑特定 stage：

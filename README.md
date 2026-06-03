@@ -6,7 +6,7 @@
 ```bash
 uv sync --extra all
 uv run dub doctor                 # confirm prerequisites
-uv run dub run talk.mp4 --source-lang en --target-lang zh
+uv run dub en2zh talk.mp4
 ```
 
 `video-dub-cli` packages a multi-stage video-dubbing workflow into a
@@ -31,7 +31,8 @@ dev` + `uv run dub doctor` + a fake-backend end-to-end smoke all pass.
 
 ## Highlights
 
-- **Single entrypoint**: `dub run`, `dub resume`, `dub status`, `dub clean`, `dub validate`, `dub doctor`, `dub bootstrap`
+- **One-shot operator aliases**: `dub en2zh`, `dub ja2zh`
+- **Advanced/base entrypoint**: `dub run`, plus `dub resume`, `dub status`, `dub clean`, `dub validate`, `dub doctor`, `dub bootstrap`
 - **Resumable by design**: continue interrupted runs with `dub resume`
 - **Artifact-driven workflow**: each stage persists outputs on disk under `01_raw_video/`, `02_stems/`, ... `07_final/`
 - **Operator-grade validation**: `status`, `clean`, `validate`, and the readiness check `dub doctor` are first-class
@@ -62,16 +63,22 @@ uv run dub run talk.mp4 \
   --translated-srt talk.zhtw.srt
 ```
 
-### Let the CLI translate English to Chinese (default)
+### One-shot English → Chinese operator flow
+
+```bash
+uv run dub en2zh talk.mp4
+```
+
+### One-shot Japanese → Chinese operator flow
+
+```bash
+uv run dub ja2zh talk.mp4
+```
+
+### Advanced/base entrypoint (same pipeline, explicit languages)
 
 ```bash
 uv run dub run talk.mp4 --source-lang en --target-lang zh
-```
-
-### Let the CLI translate Japanese to Chinese
-
-```bash
-uv run dub run talk.mp4 --source-lang ja --target-lang zh
 ```
 
 ### Resume an interrupted run
@@ -201,7 +208,7 @@ See [Configuration](#configuration) for the full breakdown.
 ### 3. Run the pipeline
 
 ```bash
-uv run dub run /path/to/input/my_talk.mp4 --source-lang en --target-lang zh
+uv run dub en2zh /path/to/input/my_talk.mp4
 ```
 
 ### 4. Inspect the final output
@@ -331,7 +338,9 @@ uv run dub run talk.mp4 --source-lang en --target-lang zh \
 
 | Command | Purpose |
 |---|---|
-| `dub run VIDEO --source-lang en --target-lang zh [OPTIONS]` | Run the full 6-stage pipeline |
+| `dub en2zh VIDEO [OPTIONS]` | Run the common English → Chinese one-shot operator flow |
+| `dub ja2zh VIDEO [OPTIONS]` | Run the common Japanese → Chinese one-shot operator flow |
+| `dub run VIDEO --source-lang <lang> --target-lang zh [OPTIONS]` | Advanced/base entrypoint for explicit language control |
 | `dub resume --project-dir <project-dir>` | Continue a previous (interrupted or partially failed) run |
 | `dub status --project-dir <project-dir>` | Print per-stage status |
 | `dub clean --project-dir <project-dir> [--stage N]` | Remove stage outputs (preserve source by default) |
@@ -411,7 +420,7 @@ source it in your shell before invoking `dub run`:
 cp .env.example .env
 # edit .env to put your real key
 set -a; source .env; set +a
-uv run dub run talk.mp4 --source-lang en --target-lang zh
+uv run dub en2zh talk.mp4
 ```
 
 ## Documentation
