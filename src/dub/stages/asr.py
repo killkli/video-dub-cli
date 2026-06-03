@@ -1,13 +1,15 @@
-"""stages/asr.py — Stage 2: ASR transcription using qwenasr-mlx."""
+"""stages/asr.py — Stage 2: ASR transcription using repo-owned qwenasr_mlx_cli."""
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 
-from dub.stages.base import Stage, StageState
 from dub.config import DubConfig
 from dub.state import now_iso
+from dub.stages.base import Stage, StageState
+from qwenasr_mlx_cli.core.exceptions import ASRProcessingError, BackendUnavailableError, InputValidationError
+from qwenasr_mlx_cli.core.types import SubtitleConfig
+from qwenasr_mlx_cli.pipelines.transcribe import run_transcription
 
 
 class AsrStage(Stage):
@@ -24,40 +26,35 @@ class AsrStage(Stage):
         input_video = project_dir / "01_raw_video" / "video.mp4"
         srt_out = project_dir / "03_asr" / "video.srt"
         log_file = project_dir / ".dub" / f"{self.name}.log"
-        cli = config.paths.qwenasr_cli
 
         srt_out.parent.mkdir(parents=True, exist_ok=True)
         log_file.parent.mkdir(parents=True, exist_ok=True)
 
-        cmd = [
-            str(cli),
-            "transcribe",
-            str(input_video),
-            "--output-format",
-            "srt",
-        ]
-        if config.defaults.source_lang:
-            cmd += ["--language", config.defaults.source_lang]
-
-        with open(srt_out, "w", encoding="utf-8") as out_fh, open(log_file, "w", encoding="utf-8") as log_fh:
-            result = subprocess.run(
-                cmd,
-                stdout=out_fh,
-                stderr=log_fh,
-                text=True,
-                check=False,
+        subtitle_config = SubtitleConfig(output_format="srt")
+        try:
+            rendered = run_transcription(
+                input_path=input_video,
+                backend_name="mlx",
+                output_format="srt",
+                language=config.defaults.source_lang or None,
+                prompt=None,
+                subtitle_config=subtitle_config,
+                convert_simplified_to_traditional=False,
             )
-
-        if result.returncode != 0:
+        except (BackendUnavailableError, InputValidationError, ASRProcessingError, NotImplementedError) as exc:
+            log_file.write_text(f"ERROR: {exc}\n", encoding="utf-8")
             state.status = "failed"
             state.finished_at = now_iso()
-            state.error = f"qwenasr-mlx exited with code {result.returncode}; see {log_file}"
+            state.error = f"repo ASR pipeline failed: {exc}; see {log_file}"
             return state
+
+        srt_out.write_text(rendered, encoding="utf-8")
+        log_file.write_text("repo ASR pipeline completed\n", encoding="utf-8")
 
         if not srt_out.exists() or not srt_out.read_text(encoding="utf-8").strip():
             state.status = "failed"
             state.finished_at = now_iso()
-            state.error = f"qwenasr-mlx produced empty SRT; see {log_file}"
+            state.error = f"repo ASR pipeline produced empty SRT; see {log_file}"
             return state
 
         state.artifacts = ["video.srt"]
