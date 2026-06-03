@@ -53,6 +53,14 @@ tts = [
 # ASR / audio stack (qwen-asr MLX). Pulls in numpy / torch-free paths.
 asr = [
     "soundfile>=0.12.1",
+    "typer>=0.16.0",
+    "pydantic-settings>=2.10.0",
+    "opencc>=1.1.9",
+    "qwen3-asr-mlx>=0.1.1",
+    "pydub>=0.25.0",
+    "silero-vad>=6.0.0",
+    "torch>=2.0.0",
+    "torchaudio>=2.0.0",
 ]
 # Pipeline integration: stage scripts that produce / consume audio.
 pipeline = [
@@ -74,6 +82,14 @@ all = [
     "opencc-python-reimplemented>=0.1.7",
     "soundfile>=0.12.1",
     "numpy>=1.26.0",
+    "typer>=0.16.0",
+    "pydantic-settings>=2.10.0",
+    "opencc>=1.1.9",
+    "qwen3-asr-mlx>=0.1.1",
+    "pydub>=0.25.0",
+    "silero-vad>=6.0.0",
+    "torch>=2.0.0",
+    "torchaudio>=2.0.0",
 ]
 
 [project.scripts]
@@ -87,7 +103,7 @@ dub-bootstrap = "dub.bootstrap:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["dub*"]
+include = ["dub*", "qwenasr_mlx_cli*"]
 
 [tool.setuptools.package-data]
 dub = ["py.typed"]
