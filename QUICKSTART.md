@@ -1,19 +1,78 @@
-# Quickstart — 5 分鐘上手 video-dub-cli
+# Quickstart — 5 分鐘上手 video-dub-cli (standalone contract)
+
+> 這個 quickstart 對應 standalone clone+uv 安裝路徑。沒有其他 repo 要
+> clone，沒有 `~/.hermes/...` 路徑要指定。
+
+---
 
 ## 安裝
 
+### 1. 安裝 `uv` (如果還沒有)
+
 ```bash
-git clone <repo> ~/projects/video-dub-cli
-cd ~/projects/video-dub-cli
-python3.11 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-驗證：
+### 2. clone 這個 repo
+
 ```bash
-dub --help
+git clone https://codeberg.org/killkli/video-dub-cli
+cd video-dub-cli
 ```
+
+### 3. `uv sync` 一次到位
+
+```bash
+# 完整 standalone 環境（CLI + 翻譯 + TTS 助手 + ASR 助手）
+uv sync --extra all
+```
+
+`uv` 會建立 `.venv/`，安裝：
+- `dub` 主 CLI
+- `dub-doctor`、`dub-bootstrap` script entrypoints
+- `pyproject.toml` 內 `[project.optional-dependencies]` 的所有 extras
+
+> 只想跑測試 / 開發：`uv sync --extra dev`
+> 只要 bare CLI（單元測試用）：`uv sync`
+
+### 4. 安裝系統工具
+
+`dub run` 真正跑媒體前要裝 `ffmpeg` / `ffprobe`：
+
+```bash
+# macOS
+brew install ffmpeg
+
+# Debian / Ubuntu
+sudo apt-get install -y ffmpeg
+```
+
+### 5. 設定翻譯 API key
+
+`--translate-mode delegate`（預設）會呼叫 Gemini。需要匯出
+`GOOGLE_API_KEY`（或 `GEMINI_API_KEY`）。
+
+```bash
+# 直接 export
+export GOOGLE_API_KEY=your_g...n
+
+# 或用 .env 風格
+cp .env.example .env
+# 編輯 .env 填入真實 key
+set -a; source .env; set +a
+```
+
+### 6. 確認環境 ready
+
+```bash
+uv run dub doctor
+```
+
+passing 結果會列出每個 check 為 `OK`、每個 backend 為 `READY`。有
+missing 就會被點名，請對照 `uv run dub bootstrap` 的 6 行說明修正。
+
+> ASR 後端 `qwenasr-mlx` 不在 PyPI（目前狀態）—— 它是唯一一個
+> non-PyPI runtime dep。請見 [ASR 後端安裝](#asr-後端安裝-qwenasr-mlx)。
 
 ---
 
@@ -21,22 +80,27 @@ dub --help
 
 ### Step 1：準備設定檔
 
-先建立設定目錄，並複製 canonical example：
-
 ```bash
 mkdir -p ~/.config/dub/
-cp examples/config_delegate_en2zh.yaml /path/to/config.yaml
-vim /path/to/config.yaml   # 修改 paths（見下方）
+cp examples/config_delegate_en2zh.yaml ~/.config/dub/config.yaml
 ```
 
-`config_delegate_en2zh.yaml` 是公開參考模板。你需要把其中所有 `/path/to/...` 佔位路徑改成你自己機器上的實際路徑：
+`config_delegate_en2zh.yaml` 是公開參考模板，內含 `paths.qwenasr_cli`
+等欄位的合理預設。多數情況**不需要改任何東西**。需要客製時再改下面
+幾個欄位：
+
 ```yaml
 paths:
-  qwenasr_cli: /path/to/qwenasr-mlx
-  omnivoice_python: /path/to/omnivoice-python
-  skills_dir: /path/to/video-dubbing-pipeline/scripts
-  dub_root: /path/to/dub-root
-  translation_skill: /path/to/subtitle_translation.py
+  # ASR CLI。預設是 bare name，由 $PATH 解析。
+  qwenasr_cli: qwenasr-mlx
+  # OmniVoice 用的 Python。預設是 python3（dub venv）。
+  omnivoice_python: python3
+  # 已被 vendored 到本 repo 的 pipeline scripts。
+  skills_dir: <repo>/vendor/pipeline_scripts
+  # 預設的 project 根目錄。
+  dub_root: ~/video-dub-cli-runs/
+  # 私有 TTS wrapper 目錄覆寫。預設是 None（沿用 skills_dir）。
+  tts_engines_dir: null
 
 translation:
   provider: gemini
@@ -46,21 +110,27 @@ translation:
   mode: delegate
 ```
 
-### Step 2：執行配音
+> 舊版範例檔裡的 `/path/to/...` placeholder 在 standalone 契約下已不
+> 適用——請用 bare name（如 `qwenasr-mlx`、`python3`）或真實絕對路徑，
+> 不再保留 `/path/to/qwenasr-mlx` 之類的字面值。新版範例檔的所有
+> `paths.*` 欄位都已預設成可工作的 bare name 預設值，沒特別需求可
+> 不用動。
 
-**英文 → 中文（delegate mode，CLI 自己翻譯）：**
+### Step 2：跑配音
+
+**英文 → 中文（delegate mode，CLI 自己翻譯）**
 ```bash
-dub run /path/to/input/my_talk.mp4 --source-lang en --target-lang zh
+uv run dub run /path/to/input/my_talk.mp4 --source-lang en --target-lang zh
 ```
 
-**日文 → 中文（delegate mode，CLI 自己翻譯）：**
+**日文 → 中文（delegate mode）**
 ```bash
-dub run /path/to/input/my_anime.mp4 --source-lang ja --target-lang zh
+uv run dub run /path/to/input/my_anime.mp4 --source-lang ja --target-lang zh
 ```
 
-**已有外部翻譯字幕（use-existing mode）：**
+**已有外部翻譯字幕（use-existing mode）**
 ```bash
-dub run /path/to/input/my_talk.mp4 \
+uv run dub run /path/to/input/my_talk.mp4 \
   --source-lang en \
   --target-lang zh \
   --translate-mode use-existing \
@@ -71,10 +141,10 @@ dub run /path/to/input/my_talk.mp4 \
 
 ```bash
 # 查看每個 stage 的狀態
-dub status --project-dir /path/to/dub-project/
+uv run dub status --project-dir /path/to/dub-project/
 
 # 驗證專案結構與最終輸出
-dub validate --project-dir /path/to/dub-project/
+uv run dub validate --project-dir /path/to/dub-project/
 ```
 
 ### Step 4：找到輸出
@@ -88,7 +158,7 @@ dub validate --project-dir /path/to/dub-project/
 ## 中斷後繼續
 
 ```bash
-dub resume --project-dir /path/to/dub-project/
+uv run dub resume --project-dir /path/to/dub-project/
 ```
 
 ---
@@ -96,9 +166,98 @@ dub resume --project-dir /path/to/dub-project/
 ## 清理重跑
 
 ```bash
-# 刪除所有 stage 產物，重新來過
-dub clean --project-dir /path/to/dub-project/
+# 刪除所有 stage 產物，重新來過（source video 保留）
+uv run dub clean --project-dir /path/to/dub-project/
 
 # 再跑一次
-dub run /path/to/input/my_talk.mp4 --source-lang en --target-lang zh
+uv run dub run /path/to/input/my_talk.mp4 --source-lang en --target-lang zh
 ```
+
+只重跑特定 stage：
+
+```bash
+uv run dub clean --project-dir /path/to/dub-project/ --stage 6
+uv run dub resume --project-dir /path/to/dub-project/
+```
+
+---
+
+## ASR 後端安裝 (qwenasr-mlx)
+
+`qwenasr-mlx` 是目前唯一一個 non-PyPI runtime 依賴。repo 在
+`$PATH` 上找它（預設 `paths.qwenasr_cli = "qwenasr-mlx"`），
+`dub doctor` 會回報有沒有找到。
+
+選一個安裝方式：
+
+```bash
+# A. pipx（推薦；隔離環境）
+pipx install qwenasr-mlx
+
+# B. 灌進 dub venv
+uv pip install qwenasr-mlx
+
+# C. pipx 從 git 裝（如果還沒上 PyPI）
+pipx install git+https://github.com/<qwenasr-mlx-repo>
+```
+
+驗證：
+
+```bash
+which qwenasr-mlx
+uv run dub doctor     # 應該要看到 qwenasr_cli: OK
+```
+
+如果你把 ASR CLI 放在別的名字或路徑，用設定檔覆寫：
+
+```yaml
+paths:
+  qwenasr_cli: /full/path/to/your-asr
+```
+
+---
+
+## TTS backend 覆寫 (`tts_engines_dir`)
+
+預設情況下 Stage 5 從 `vendor/pipeline_scripts/`（也就是
+`paths.skills_dir`）抓 TTS wrapper scripts。如果你把 OmniVoice /
+VoxCPM wrappers 放在別處，用 `paths.tts_engines_dir` 覆寫：
+
+```yaml
+paths:
+  tts_engines_dir: /your/private/tts_wrappers
+```
+
+每個 backend 的 readiness 由 `dub doctor` 回報，列出 wrapper /
+interpreter / deps / service 各個 gate：
+
+```
+tts_backends:
+  omnivoice: READY (...)
+  voxcpme: BLOCKED (missing: deps:gradio_client, deps:opencc)
+```
+
+---
+
+## 系統依賴摘要
+
+| 依賴 | 必要？ | 安裝方式 |
+|---|---|---|
+| Python 3.11+ | yes | `uv` 自帶管理 |
+| `uv` | yes | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
+| `ffmpeg` / `ffprobe` | yes（任何真實 run） | `brew install ffmpeg` / `apt-get install ffmpeg` |
+| `qwenasr-mlx` | yes（ASR 模式） | `pipx install` 見上面 |
+| OmniVoice Python | optional（OmniVoice TTS backend） | 見 `dub bootstrap` |
+| VoxCPM server | optional（VoxCPM TTS backend） | 見 `dub bootstrap` |
+| Gemini API key | yes（delegate 翻譯） | `export GOOGLE_API_KEY=...` |
+
+`uv run dub doctor` 會把每一項都列出來。沒有 `~/.hermes/...` 路徑要求。
+
+---
+
+## 下一步
+
+- 卡關 → `docs/operator-runbook.md` 故障排除
+- 想了解 standalone 契約 → `docs/standalone-dependency-map.md` (T1)
+- 想看 fresh operator 驗證結果 → `docs/qa-standalone-matrix.md` (T6)
+- 想看 TTS adapter 設計 → `docs/tts-backend-consolidation.md` (T5)

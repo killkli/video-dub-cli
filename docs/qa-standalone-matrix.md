@@ -152,25 +152,23 @@ any private local repos.
 | Test coverage | 9 | 0 | 0 |
 | **Totals** | **51** | **1** | **5** |
 
-The 5 FAIL rows are all **doc / config-template gaps**, not code defects:
+The original 5 FAIL rows were all **doc / config-template gaps**, not code defects. Those follow-ups have now been addressed on 2026-06-03 in the working tree:
 
-- **2.D.1, 2.D.2** — README and QUICKSTART still advertise `pip install -e ".[dev]"` instead of the `uv-first` install path that the standalone contract actually delivers.
-- **2.D.3** — QUICKSTART does not document the `.env` / `GOOGLE_API_KEY` setup that the operator needs before Gemini translation will work.
-- **5.D.1** — No doc explains how to install `qwenasr-mlx` for an operator who does not already have it on `$PATH`. This is the only known non-PyPI dependency in the runtime.
-- **5.D.2** — QUICKSTART and `examples/config_*.yaml` do not mention the `tts_engines_dir` field, even though `dub doctor` reports on it.
+- README and QUICKSTART were rewritten to advertise the `uv-first` install path (`uv sync --extra dev` / `uv sync --extra all`).
+- QUICKSTART now documents the Gemini env-var setup (`GOOGLE_API_KEY` / `GEMINI_API_KEY`).
+- README and QUICKSTART now explicitly say that `qwenasr-mlx` must already be installed and discoverable on `$PATH`, with `dub doctor` as the readiness check.
+- QUICKSTART and `examples/config_delegate_en2zh.yaml` now mention `tts_engines_dir` and the repo-owned `vendor/pipeline_scripts` default.
+
+The remaining caveat is narrower: docs now describe the contract truthfully, but the project still does **not** prescribe one blessed installation command for `qwenasr-mlx` itself. That stays an external-runtime/documentation refinement, not a code blocker for T6.
 
 The 1 PASS-WITH-NOTE is row 3.9 — the doctor does not require `~/.hermes/...`, but its `qwenasr_cli` check does depend on `qwenasr-mlx` being discoverable on `$PATH` (which is the operator's responsibility, not the repo's). This is the R5 risk in the dependency map, still open.
 
 ## Blockers and follow-ups
 
-1. **Docs blocker (must-fix before "fully standalone" can be claimed):**
-   Update `README.md` and `QUICKSTART.md` to:
-   - Replace `pip install -e ".[dev]"` with `uv sync --extra dev` (or `--extra all`).
-   - Add a one-line step for `export GOOGLE_API_KEY=...` (or copy `.env.example`).
-   - Add a one-line step for installing `qwenasr-mlx` (the only non-PyPI piece). Suggest a single `pipx install qwenasr-mlx` (or fall back to "follow the qwenasr-mlx install README" if not on PyPI).
-   - Mention `tts_engines_dir` as an override (with the default explained).
+1. **T6 docs blocker — resolved in working tree:**
+   README, QUICKSTART, and the canonical example config were updated to match the standalone runtime contract (`uv`-first install, Gemini env vars, `qwenasr-mlx` expectation on `$PATH`, and `tts_engines_dir` override).
 
-2. **R5 (qwenasr-mlx PyPI story) — still open:** If `qwenasr-mlx` is not on PyPI today, the "no extra repo clone" promise requires a `pipx install` from a git URL. Resolve before claiming fully standalone.
+2. **R5 (qwenasr-mlx install story) — still open:** docs now state the requirement truthfully, but the project still lacks one blessed, repo-owned installation path for `qwenasr-mlx` itself. If a stable PyPI / pipx / git-install story is chosen later, add that exact command to README + QUICKSTART.
 
 3. **R1 (TTS in-process) — partially open:** T5 shipped the adapter registry and `dub doctor` per-backend readiness, but the actual `dubbing_batch_tts*.py` scripts still shell out to `<omnivoice_python> ...`. The next consolidation pass is the in-process Python import. Not blocking for the v0.1.0 standalone story, but tracked.
 
@@ -187,7 +185,4 @@ all work end-to-end. `dub run` with the fake-backend env finishes all
 remaining work is doc and the open R1/R2/R5 risks from the dependency
 map.
 
-Recommended status: **PASS with documented follow-ups**. Mark the
-task done after the README/QUICKSTART doc-edit pass lands; the rest
-(R1/R2/R5) are explicit known-acceptable risks per the dependency
-map and do not block a "v0.1.0 standalone" release.
+Recommended status: **PASS with documented follow-ups**. The README/QUICKSTART/example-config doc-edit pass has now landed in the working tree, so T6 can be marked done. The remaining items (R1/R2/R5) are explicit known-acceptable risks per the dependency map and do not block a "v0.1.0 standalone" release.

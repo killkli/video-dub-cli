@@ -1,14 +1,51 @@
 # Canonical example: delegate translation route (English -> Chinese)
-# Usage: copy this file to your local config path, then replace all /path/to/... placeholders with your own machine-specific paths.
-# Then run: dub run video.mp4 --source-lang en --target-lang zh
+# Standalone contract: every default below is repo-owned or PATH-resolved.
+#
+# This file is a documentation reference. The package ships working
+# defaults via src/dub/config.py::DEFAULT_PATHS, so a copy with only
+# the explicit values below runs end-to-end on a host that has:
+#   - `qwenasr-mlx` discoverable on $PATH
+#   - `python3` available (the dub venv's python3 works)
+#   - `vendor/pipeline_scripts/` present at the repo root (it is)
+#   - `GOOGLE_API_KEY` exported (or GEMINI_API_KEY)
+#
+# Typical usage (no edits needed):
+#   cp examples/config_delegate_en2zh.yaml ~/.config/dub/config.yaml
+#   uv run dub run talk.mp4 --source-lang en --target-lang zh
+#
+# Override guide — uncomment only the lines you actually need to change:
+#   - paths.qwenasr_cli: only if the ASR CLI is not on $PATH
+#   - paths.omnivoice_python: only if OmniVoice's torch stack lives in
+#     a separate venv
+#   - paths.tts_engines_dir: only if your TTS wrapper scripts are not in
+#     vendor/pipeline_scripts/
+#   - paths.dub_root: only if you want a different project parent dir
+#   - translation.api_env_var: only if you prefer GEMINI_API_KEY
 
 paths:
-  qwenasr_cli: /path/to/qwenasr-mlx
-  omnivoice_python: /path/to/omnivoice-python
-  skills_dir: /path/to/video-dubbing-pipeline/scripts
-  dub_root: /path/to/dub-root
-  # Legacy compatibility only: standalone CLI translation now uses translation.provider/model below.
-  translation_skill: /path/to/subtitle_translation.py
+  # ASR CLI. Default (auto-applied if absent): "qwenasr-mlx", resolved
+  # via shutil.which. Override only if the binary is under a custom name
+  # or absolute path.
+  # qwenasr_cli: qwenasr-mlx
+  # Python interpreter for OmniVoice wrappers. Default: "python3" (the
+  # active interpreter when running via `uv run`). Override only if
+  # OmniVoice's torch stack lives in a separate venv.
+  # omnivoice_python: python3
+  # Repo-owned pipeline scripts. Default: <repo>/vendor/pipeline_scripts.
+  # Override only if you keep a private copy elsewhere.
+  # skills_dir: <repo>/vendor/pipeline_scripts
+  # TTS wrapper override. Default: null (falls back to skills_dir). Set
+  # this to a directory of OmniVoice / VoxCPM wrapper scripts if they
+  # are not in vendor/pipeline_scripts/.
+  # tts_engines_dir: null
+  # Where new project directories are created. Default:
+  # ~/video-dub-cli-runs/. Uncomment to override.
+  # dub_root: ~/video-dub-cli-runs/
+  # Legacy compatibility only. Default: src/dub/translator_gemini.py in
+  # this repo. The standalone CLI translates in-process via
+  # translation.provider/model; this field is no longer read by any
+  # active stage. Kept on the schema for one release.
+  # translation_skill: <repo>/src/dub/translator_gemini.py
 
 translation:
   provider: gemini
