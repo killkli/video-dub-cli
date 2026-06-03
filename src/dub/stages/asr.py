@@ -47,6 +47,12 @@ class AsrStage(Stage):
             state.finished_at = now_iso()
             state.error = f"repo ASR pipeline failed: {exc}; see {log_file}"
             return state
+        except Exception as exc:
+            log_file.write_text(f"UNEXPECTED ERROR: {exc}\n", encoding="utf-8")
+            state.status = "failed"
+            state.finished_at = now_iso()
+            state.error = f"repo ASR pipeline failed: {exc}; see {log_file}"
+            return state
 
         srt_out.write_text(rendered, encoding="utf-8")
         log_file.write_text("repo ASR pipeline completed\n", encoding="utf-8")
