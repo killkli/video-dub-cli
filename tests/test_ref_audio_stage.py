@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 from dub.config import DubConfig
+from dub.runtime_paths import pipeline_script
 from dub.stages.base import RefAudioStage
 
 
@@ -145,7 +146,7 @@ def test_ref_audio_stage_invokes_script_with_three_positional_args(tmp_path, mon
     # the interpreter and the script path.
     assert len(cmd) == 5
     assert cmd[0] == "python3"
-    assert cmd[1] == str(cfg.paths.skills_dir / "dubbing_extract_ref.py")
+    assert cmd[1] == str(pipeline_script("dubbing_extract_ref.py"))
     assert cmd[2] == str(proj / "01_raw_video" / "video.mp4")
     assert cmd[3] == str(proj / "03_asr" / "video.srt")
     # The output dir MUST end with "/" — that's the script's signature.

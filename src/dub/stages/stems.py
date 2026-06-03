@@ -7,6 +7,7 @@ from pathlib import Path
 
 from dub.stages.base import Stage, StageState
 from dub.config import DubConfig
+from dub.runtime_paths import pipeline_script
 from dub.state import now_iso
 
 
@@ -22,7 +23,7 @@ class StemsStage(Stage):
         state.attempts = 1
 
         log_file = project_dir / ".dub" / f"{self.name}.log"
-        script = config.paths.skills_dir / "dubbing_stems.py"
+        script = pipeline_script("dubbing_stems.py")
         if not script.exists():
             state.status = "failed"
             state.finished_at = now_iso()

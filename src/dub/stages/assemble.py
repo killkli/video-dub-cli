@@ -48,6 +48,7 @@ import tempfile
 from pathlib import Path
 
 from dub.config import DubConfig
+from dub.runtime_paths import pipeline_script
 from dub.state import now_iso
 from dub.stages.base import Stage, StageState
 
@@ -110,7 +111,7 @@ class AssembleStage(Stage):
             state.error = f"translated zh SRT missing: {zh_srt}"
             return state
 
-        loudnorm_script = config.paths.skills_dir / "dubbing_assemble_loudnorm.py"
+        loudnorm_script = pipeline_script("dubbing_assemble_loudnorm.py")
         if not loudnorm_script.exists():
             state.status = "failed"
             state.finished_at = now_iso()
@@ -167,7 +168,7 @@ class AssembleStage(Stage):
                 temp_fulltrack.unlink()
 
         # ── Step 2: dubbing_remix.py → video_dubbed_stem.mp4 ──────────────────
-        remix_script = config.paths.skills_dir / "dubbing_remix.py"
+        remix_script = pipeline_script("dubbing_remix.py")
         if not remix_script.exists():
             state.status = "failed"
             state.finished_at = now_iso()

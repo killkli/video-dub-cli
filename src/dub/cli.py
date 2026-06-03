@@ -9,6 +9,7 @@ import click
 
 from dub.config import load_config
 from dub.errors import UserError
+from dub.runtime_paths import pipeline_scripts_dir
 from dub.project import STAGE_DIRS, create_project, initialize_project, project_input_info
 from dub.runner import run_pipeline
 from dub.state import load_state, new_state, save_state
@@ -289,9 +290,8 @@ def doctor(config_path):
     checks.append(("ffmpeg", ffmpeg_ok, ffmpeg_detail))
     ffprobe_ok, ffprobe_detail = _which_status("ffprobe")
     checks.append(("ffprobe", ffprobe_ok, ffprobe_detail))
-    py_ok, py_detail = _which_status(str(cfg.paths.omnivoice_python))
-    checks.append(("omnivoice_python", py_ok, py_detail))
-    skills_ok, skills_detail = _path_status(cfg.paths.skills_dir)
+    scripts_dir = pipeline_scripts_dir()
+    skills_ok, skills_detail = _path_status(scripts_dir)
     checks.append(("repo_pipeline_scripts", skills_ok, skills_detail))
     gemini_ok, gemini_detail = _env_status(cfg.translation.api_env_var, "GOOGLE_API_KEY", "GEMINI_API_KEY")
     checks.append(("gemini_api_key", gemini_ok, gemini_detail))

@@ -23,21 +23,25 @@ FIXTURE = Path(__file__).parent / "fixtures" / "test_short.mp4"
 
 @pytest.fixture(autouse=True)
 def mock_external_cli_for_smoke(monkeypatch):
+    # Stage 2 (ASR) is now repo-owned: src/dub/stages/asr.py imports
+    # `run_transcription` directly from the vendored qwenasr_mlx_cli package,
+    # not via subprocess. Stub it at the stage's import site so the smoke
+    # pipeline does not need real ASR weights.
+    def fake_run_transcription(**kwargs):
+        return (
+            "1\n00:00:00,000 --> 00:00:01,000\nHello from mocked ASR.\n"
+            "2\n00:00:01,000 --> 00:00:02,000\nSecond mocked line.\n"
+        )
+
+    monkeypatch.setattr(
+        "dub.stages.asr.run_transcription", fake_run_transcription
+    )
+
     real_run = subprocess.run
 
     def wrapped_run(cmd, *args, **kwargs):
         cmd_list = list(cmd) if isinstance(cmd, (list, tuple)) else [cmd]
-        cmd0 = cmd_list[0] if cmd_list else ""
         cmd_strs = [str(x) for x in cmd_list]
-
-        if isinstance(cmd0, str) and "qwenasr-mlx" in cmd0:
-            stdout = kwargs.get("stdout")
-            stderr = kwargs.get("stderr")
-            if stdout is not None:
-                stdout.write("1\n00:00:00,000 --> 00:00:01,000\nHello from mocked ASR.\n")
-            if stderr is not None:
-                stderr.write("mocked qwenasr ok")
-            return subprocess.CompletedProcess(cmd, 0)
 
         if any("dubbing_extract_ref.py" in s for s in cmd_strs):
             out_dir = Path(cmd_strs[-1].rstrip("/"))

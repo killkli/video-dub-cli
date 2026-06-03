@@ -32,6 +32,7 @@ from pathlib import Path
 import pytest
 
 from dub.config import DubConfig, DefaultsConfig
+from dub.runtime_paths import pipeline_script
 from dub.stages.base import AssembleStage
 
 
@@ -191,7 +192,7 @@ def test_run_invokes_remix_with_exact_cli_shape(tmp_path, monkeypatch):
     # [python3, <remix.py>, --project-dir, <p>, --vocal-mix, <tts_normalized>,
     #  --output, <stem.mp4>, --vocal-gain, <db>, --inst-gain, <db>]
     assert cmd[0] == "python3"
-    assert cmd[1] == str(cfg.paths.skills_dir / "dubbing_remix.py")
+    assert cmd[1] == str(pipeline_script("dubbing_remix.py"))
     assert cmd[2:4] == ["--project-dir", str(proj)]
     assert cmd[4:6] == ["--vocal-mix", str(proj / "06_tts_wav" / "tts_normalized.wav")]
     assert cmd[6:8] == ["--output", str(proj / "07_final" / "video_dubbed_stem.mp4")]
@@ -433,36 +434,32 @@ def test_run_fails_when_no_tts_wavs(tmp_path, monkeypatch):
     assert "no TTS wavs" in (state.error or "")
 
 
-def test_run_fails_when_loudnorm_script_missing(tmp_path, monkeypatch):
+def test_run_uses_repo_owned_loudnorm_script(tmp_path, monkeypatch):
     proj = _make_project(tmp_path)
 
-    cfg = DubConfig()
-    empty_skills = tmp_path / "empty-skills"
-    empty_skills.mkdir()
-    cfg.paths.skills_dir = empty_skills
+    fake_run, calls = _record_subprocess(proj)
+    monkeypatch.setattr(subprocess, "run", fake_run)
 
-    state = AssembleStage().run(proj, cfg)
-    assert state.status == "failed"
-    assert "loudnorm script not found" in (state.error or "")
+    state = AssembleStage().run(proj, DubConfig())
+    assert state.status == "done"
+    builder_calls = [c for c in calls if "dubbing_assemble_loudnorm" in c["cmd"][1]]
+    assert len(builder_calls) == 1
+    assert builder_calls[0]["cmd"][1] == str(pipeline_script("dubbing_assemble_loudnorm.py"))
 
 
-def test_run_fails_when_remix_script_missing(tmp_path, monkeypatch):
-    """If config.paths.skills_dir doesn't have dubbing_remix.py, fail fast
-    with a clear error before shelling out.
-    """
+def test_run_uses_repo_owned_remix_script(tmp_path, monkeypatch):
+    """Assemble stage should resolve remix from repo-owned pipeline scripts."""
     proj = _make_project(tmp_path)
     (proj / "06_tts_wav" / "tts_normalized.wav").write_bytes(b"\x00" * 4096)
 
-    skills_dir = tmp_path / "skills"
-    skills_dir.mkdir()
-    (skills_dir / "dubbing_assemble_loudnorm.py").write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+    fake_run, calls = _record_subprocess(proj)
+    monkeypatch.setattr(subprocess, "run", fake_run)
 
-    cfg = DubConfig()
-    cfg.paths.skills_dir = skills_dir
-
-    state = AssembleStage().run(proj, cfg)
-    assert state.status == "failed"
-    assert "remix script not found" in (state.error or "")
+    state = AssembleStage().run(proj, DubConfig())
+    assert state.status == "done"
+    remix_calls = [c for c in calls if "dubbing_remix" in c["cmd"][1]]
+    assert len(remix_calls) == 1
+    assert remix_calls[0]["cmd"][1] == str(pipeline_script("dubbing_remix.py"))
 
 
 # ── run() legacy alias + artifacts ───────────────────────────────────────────

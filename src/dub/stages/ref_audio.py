@@ -17,6 +17,7 @@ import subprocess
 from pathlib import Path
 
 from dub.config import DubConfig
+from dub.runtime_paths import pipeline_script
 from dub.state import StageState
 from dub.stages.base import Stage
 
@@ -110,7 +111,7 @@ class RefAudioStage(Stage):
         ref_dir.mkdir(parents=True, exist_ok=True)
         log_file.parent.mkdir(parents=True, exist_ok=True)
 
-        script = config.paths.skills_dir / "dubbing_extract_ref.py"
+        script = pipeline_script("dubbing_extract_ref.py")
         # Script signature: <video.mp4> <source.srt> <output_dir/>
         # The trailing slash matters — the script uses Path.resolve() and
         # mkdir(parents=True, exist_ok=True) on it.
