@@ -81,7 +81,7 @@ def test_6e_delegate_fresh_run_records_translated_subtitle_contract(
     )
 
     assert result.returncode == 0, result.stderr or result.stdout
-    assert "translate=delegate (committed provider route)" in result.stdout
+    assert "translate=delegate provider=mock" in result.stdout
     assert f"preflight: src=en tgt=zh project={project_dir}" in result.stdout
 
     zh_srt = project_dir / "05_translated_srt" / "video.zhtw.srt"
@@ -130,6 +130,7 @@ def test_6e_use_existing_fresh_run_copies_external_srt_into_project(
 
     assert result.returncode == 0, result.stderr or result.stdout
     assert f"translate=use-existing external_srt={external_srt}" in result.stdout
+    assert f"run complete: project={project_dir}" in result.stdout
 
     project_srt = project_dir / "05_translated_srt" / "video.zhtw.srt"
     primary_srt = project_dir / "05_translate" / "video.zhtw.srt"
@@ -191,6 +192,7 @@ def test_6e_skip_resume_reuses_existing_project_translated_subtitle(
     )
     assert rerun.returncode == 0, rerun.stderr or rerun.stdout
     assert "translate=skip existing_project_srt=" in rerun.stdout
+    assert f"run complete: project={project_dir}" in rerun.stdout
 
     after = _read(project_srt)
     assert after == before, "skip route should reuse in-project translated subtitle instead of replacing it"
@@ -229,6 +231,7 @@ def test_6e_ja_route_uses_vox_script_contract(
 
     assert result.returncode == 0, result.stderr or result.stdout
     assert f"preflight: src=ja tgt=zh project={project_dir}" in result.stdout
+    assert "translate=delegate provider=mock" in result.stdout
 
     asr_srt = project_dir / "03_asr" / "video.srt"
     assert asr_srt.exists()

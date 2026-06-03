@@ -90,7 +90,7 @@ def _preflight_route_summary(project_dir: Path, cfg) -> str:
     project_translated_srt = project_dir / "05_translated_srt" / "video.zhtw.srt"
 
     if mode == "delegate":
-        route = "translate=delegate (committed provider route)"
+        route = f"translate=delegate provider={cfg.translation.provider}"
     elif mode == "use-existing":
         route = f"translate=use-existing external_srt={translated_srt}"
     else:
@@ -103,6 +103,15 @@ def _preflight_route_summary(project_dir: Path, cfg) -> str:
         f"project={project_dir} "
         f"mode={mode} "
         f"route={route}"
+    )
+
+
+def _completion_summary(prefix: str, project_dir: Path) -> str:
+    final_mp4 = project_dir / "07_final" / "video_dubbed_stem.mp4"
+    return (
+        f"{prefix}: project={project_dir} final={final_mp4}\n"
+        f"next: dub status --project-dir {project_dir}\n"
+        f"next: dub validate --project-dir {project_dir}"
     )
 
 
@@ -176,7 +185,7 @@ def run(video, source_lang, target_lang, project_dir, config_path,
         run_pipeline(pdir, cfg, yes=yes)
     except UserError as exc:
         raise click.ClickException(str(exc)) from exc
-    click.echo(f"run complete: project={pdir}")
+    click.echo(_completion_summary("run complete", pdir))
 
 
 @main.command(name="resume")
@@ -193,7 +202,7 @@ def resume_cmd(project_dir, config_path):
     cfg = _restore_cfg_from_state_inputs(project_dir, cfg)
     _refresh_runtime_input_state(project_dir, cfg)
     run_pipeline(project_dir, cfg, yes=True)
-    click.echo(f"resume complete: project={project_dir}")
+    click.echo(_completion_summary("resume complete", project_dir))
 
 
 @main.command()
