@@ -58,6 +58,8 @@ def test_dub_bootstrap_exits_zero(runner):
     result = runner.invoke(main, ["bootstrap"])
     assert result.exit_code == 0
     assert "uv sync" in result.output
+    assert "repo-owned pipeline scripts live under vendor/pipeline_scripts" in result.output
+    assert "the only required external secret is GOOGLE_API_KEY / GEMINI_API_KEY" in result.output
 
 
 def test_dub_doctor_reports_missing_prereqs(runner, tmp_path):

@@ -69,7 +69,7 @@ uv run dub doctor
 ```
 
 passing 結果會列出每個 check 為 `OK`、每個 backend 為 `READY`。有
-missing 就會被點名，請對照 `uv run dub bootstrap` 的 6 行說明修正。
+missing 就會被點名，請對照 `uv run dub bootstrap` 的 7 行說明修正。
 
 > ASR 後端 `qwenasr-mlx` 不在 PyPI（目前狀態）—— 它是唯一一個
 > non-PyPI runtime dep。請見 [ASR 後端安裝](#asr-後端安裝-qwenasr-mlx)。
@@ -85,22 +85,22 @@ mkdir -p ~/.config/dub/
 cp examples/config_delegate_en2zh.yaml ~/.config/dub/config.yaml
 ```
 
-`config_delegate_en2zh.yaml` 是公開參考模板，內含 `paths.qwenasr_cli`
-等欄位的合理預設。多數情況**不需要改任何東西**。需要客製時再改下面
-幾個欄位：
+`config_delegate_en2zh.yaml` 是公開參考模板，內含 legacy 相容欄位與
+目前 standalone 契約的合理預設。多數情況**不需要改任何東西**。
+需要客製時再改下面幾個欄位：
 
 ```yaml
 paths:
-  # ASR CLI。預設是 bare name，由 $PATH 解析。
-  qwenasr_cli: qwenasr-mlx
+  # Legacy 相容欄位。Stage 2 現在是 repo-owned；一般 operator 不需要設定。
+  qwenasr_cli: null
   # OmniVoice 用的 Python。預設是 python3（dub venv）。
   omnivoice_python: python3
   # 已被 vendored 到本 repo 的 pipeline scripts。
   skills_dir: <repo>/vendor/pipeline_scripts
   # 預設的 project 根目錄。
   dub_root: ~/video-dub-cli-runs/
-  # 私有 TTS wrapper 目錄覆寫。預設是 None（沿用 skills_dir）。
-  tts_engines_dir: null
+  # 進階 / legacy 覆寫用。一般情況不要改，沿用 repo 內建路徑即可。
+  tts_engines_dir: <repo>/vendor/pipeline_scripts
 
 translation:
   provider: gemini
@@ -184,9 +184,11 @@ uv run dub resume --project-dir /path/to/dub-project/
 
 ## ASR 後端安裝 (qwenasr-mlx)
 
-`qwenasr-mlx` 是目前唯一一個 non-PyPI runtime 依賴。repo 在
-`$PATH` 上找它（預設 `paths.qwenasr_cli = "qwenasr-mlx"`），
-`dub doctor` 會回報有沒有找到。
+`qwenasr-mlx` 仍是外部 ASR 依賴，但它已**不是** `dub doctor` 的主
+operator readiness gate。現在 `doctor` 主要檢查 repo-owned wrapper
+路徑、Gemini key、ffmpeg/ffprobe，以及 TTS backend readiness。若你要
+覆寫舊版相容欄位，repo 仍接受 `paths.qwenasr_cli`，但一般 operator
+不需要設定它。
 
 選一個安裝方式：
 
@@ -205,7 +207,8 @@ pipx install git+https://github.com/<qwenasr-mlx-repo>
 
 ```bash
 which qwenasr-mlx
-uv run dub doctor     # 應該要看到 qwenasr_cli: OK
+# doctor 不會再把 qwenasr_cli 列成主 gate；這一步只是確認 CLI 可被找到
+uv run dub doctor
 ```
 
 如果你把 ASR CLI 放在別的名字或路徑，用設定檔覆寫：

@@ -59,7 +59,10 @@ def test_dub_bootstrap_main_forwards_to_cli():
             main()
         except SystemExit as exc:
             assert exc.code == 0
-    assert "uv sync" in out.getvalue()
+    text = out.getvalue()
+    assert "uv sync" in text
+    assert "repo-owned pipeline scripts live under vendor/pipeline_scripts" in text
+    assert "the only required external secret is GOOGLE_API_KEY / GEMINI_API_KEY" in text
 
 
 def test_dub_bootstrap_module_runs_as_script():

@@ -180,8 +180,8 @@ If something is missing, run:
 uv run dub bootstrap
 ```
 
-…and read the 6-line guidance. It points at the exact system tool, env
-var, or backend that needs attention.
+…and read the 7-line guidance. It points at the exact system tool, env
+var, repo-owned wrapper directory, or backend gate that needs attention.
 
 ### 2. Prepare config
 
@@ -192,9 +192,11 @@ cp examples/config_delegate_en2zh.yaml /path/to/config.yaml
 ```
 
 The example config ships with sensible defaults — most fields are
-optional. The only field that is **not** defaulted to a working path is
-`paths.omnivoice_python`, because OmniVoice's `torch` stack varies per
-host. See [Configuration](#configuration) for the full breakdown.
+optional. In the standalone contract, operators normally only need to
+override `paths.omnivoice_python` if OmniVoice lives in a different
+Python environment. The repo-owned wrapper directory already defaults to
+`vendor/pipeline_scripts` and should not need normal operator changes.
+See [Configuration](#configuration) for the full breakdown.
 
 ### 3. Run the pipeline
 
@@ -214,10 +216,11 @@ The config schema lives in `src/dub/config.py`. The default config that
 ships with the repo (no `--config` flag) is already valid for a fresh
 operator. You only need a custom config to override:
 
-- `paths.tts_engines_dir` — if your TTS wrapper scripts are not in
-  `vendor/pipeline_scripts/`
 - `paths.omnivoice_python` — if OmniVoice's Python lives outside the
-  dub venv
+  default interpreter path
+- `paths.skills_dir` / `paths.tts_engines_dir` — only for advanced or
+  legacy compatibility cases; normal operators should use the repo-owned
+  default `vendor/pipeline_scripts`
 - `defaults.vocal_gain` / `inst_gain` — to retune the mix
 - `translation.model` — to pin a specific Gemini model
 
@@ -225,8 +228,9 @@ Full schema (canonical: see `src/dub/config.py`):
 
 ```yaml
 paths:
-  # ASR CLI. Default: bare name "qwenasr-mlx" (resolved on $PATH).
-  qwenasr_cli: qwenasr-mlx
+  # Legacy compatibility only. Stage 2 is now repo-owned; operators do
+  # not normally need to set this. Kept so older configs still parse.
+  qwenasr_cli: null
   # Python interpreter that runs OmniVoice wrappers. Default: python3
   # from the dub venv. Override only if OmniVoice lives in a separate venv.
   omnivoice_python: python3
@@ -240,10 +244,9 @@ paths:
   # Where new project directories are created. Default:
   # ~/video-dub-cli-runs/
   dub_root: ~/video-dub-cli-runs/
-  # Optional override. Default: None, which falls back to skills_dir.
-  # Set this if your OmniVoice / VoxCPM wrapper scripts are not in
-  # vendor/pipeline_scripts/ (e.g. you keep a private copy elsewhere).
-  tts_engines_dir: null
+  # Advanced / legacy override only. Normal operators should leave the
+  # repo-owned default alone.
+  tts_engines_dir: <repo>/vendor/pipeline_scripts
 
 translation:
   provider: gemini           # only "gemini" and "mock" are supported
