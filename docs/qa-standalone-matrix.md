@@ -69,25 +69,24 @@ I simulated a fresh clone by copying the source tree to
 |---|-------|---------|--------|-------|
 | 3.1 | `dub doctor` exits non-zero when prerequisites are missing | `uv run dub doctor` on host | **PASS** — exit code 1, prints per-check OK/MISSING and per-backend READY/BLOCKED | Click raises `ClickException` when any check fails (cli.py:324) |
 | 3.2 | `dub doctor` reports on `ffmpeg` and `ffprobe` | doctor output | **PASS** — `ffmpeg: OK (/opt/homebrew/bin/ffmpeg)` and `ffprobe: OK` | |
-| 3.3 | `dub doctor` reports on `qwenasr_cli` (now resolved via `shutil.which`-style discovery) | doctor output | **PASS** — `qwenasr_cli: OK (/Users/.../qwenasr-mlx)` | H5 target achieved: default is the bare name `qwenasr-mlx`, not a hard-coded path. `dub doctor` finds it on `$PATH` |
-| 3.4 | `dub doctor` reports on `omnivoice_python` | doctor output | **PASS** — `omnivoice_python: OK (/.../dub venv python3)` | Default is the bare name `python3`; the resolved path is whatever `shutil.which` finds in the dub venv |
-| 3.5 | `dub doctor` reports on `tts_engines_dir` (the new config field) | doctor output | **PASS** — `tts_engines_dir: OK (.../vendor/pipeline_scripts)` | T5 deliverable is honest about where it is |
-| 3.6 | `dub doctor` reports per-backend readiness (OmniVoice, VoxCPM) | doctor output | **PASS** — `tts_backends: omnivoice: BLOCKED (missing: deps:torch)`, `voxcpme: BLOCKED (missing: deps:gradio_client, deps:opencc)` | Each gate (wrapper / interpreter / deps / service) is listed individually |
-| 3.7 | `dub doctor` reports on translation API key | doctor output | **PASS** — `gemini_api_key: MISSING (GOOGLE_API_KEY,GEMINI_API_KEY)` | Multi-key candidate list honored (translator_gemini.py:67-89) |
-| 3.8 | When `GOOGLE_API_KEY` is set, doctor reports OK | `GOOGLE_API_KEY=*** uv run dub doctor` | **PASS** — `gemini_api_key: OK (GOOGLE_API_KEY)` | |
-| 3.9 | `dub doctor` does not require any `~/.hermes/...` path to be present | doctor output, post-clean of `~/.hermes` | **PASS-WITH-NOTE** — None of the OK/MISSING rows reference a `~/.hermes/...` file. **However**, the default `qwenasr_cli` resolution depends on `~/.hermes/hermes-agent/venv/bin/qwenasr-mlx` being on `$PATH` from the operator's existing venv. On a host with a fresh `uv sync` and **no** pre-existing `qwenasr-mlx` install, this check will read `MISSING`. That is correct behavior (it tells the operator to install it), but the doc/QUICKSTART does not yet spell out the install command for `qwenasr-mlx` (see row 5.D.1). |
+| 3.3 | `dub doctor` reports on the repo-owned wrapper directory | doctor output | **PASS** — `repo_pipeline_scripts: OK (.../vendor/pipeline_scripts)` | `dub doctor` now validates the resolved wrapper directory via `runtime_paths.pipeline_scripts_dir()`, not legacy config fields |
+| 3.4 | `dub doctor` reports per-backend readiness (OmniVoice, VoxCPM) | doctor output | **PASS** — `tts_backends: omnivoice: BLOCKED (missing: deps:torch)`, `voxcpme: BLOCKED (missing: deps:gradio_client, deps:opencc)` | Each gate (wrapper / interpreter / deps / service) is listed individually |
+| 3.5 | `dub doctor` reports on translation API key | doctor output | **PASS** — `gemini_api_key: MISSING (GOOGLE_API_KEY,GEMINI_API_KEY)` | Multi-key candidate list honored (translator_gemini.py:67-89) |
+| 3.6 | When `GOOGLE_API_KEY` is set, doctor reports OK | `GOOGLE_API_KEY=*** uv run dub doctor` | **PASS** — `gemini_api_key: OK (GOOGLE_API_KEY)` | |
+| 3.7 | `dub doctor` does not require any `~/.hermes/...` path to be present | doctor output, post-clean of `~/.hermes` | **PASS** — None of the doctor gates require a `~/.hermes/...` path. The repo-owned wrapper check resolves inside the checkout, and the remaining gates are `ffmpeg`, `ffprobe`, and the translation env var. |
 
 ## 4. `dub bootstrap` — guidance text
 
 | # | Check | Command | Result | Notes |
 |---|-------|---------|--------|-------|
-| 4.1 | `dub bootstrap` exits 0 and prints guidance | `uv run dub bootstrap` | **PASS** — 6 lines covering uv sync, ffmpeg install, .env export, vendored pipeline scripts, OmniVoice / VoxCPM backend prep, and `tts_engines_dir` override | |
+| 4.1 | `dub bootstrap` exits 0 and prints guidance | `uv run dub bootstrap` | **PASS** — 7 lines covering uv sync, ffmpeg install, .env export, repo-owned pipeline scripts, OmniVoice backend prep, VoxCPM backend prep, and the only required external secret | |
 | 4.2 | Bootstrap text names `uv sync --extra all` as the canonical install command | grep output | **PASS** — line 1: `bootstrap: repo package install is uv-managed; run \`uv sync --extra all\` for the full standalone stack` | |
 | 4.3 | Bootstrap text names the API key env vars | grep output | **PASS** — line 3: `bootstrap: copy \`.env.example\` to your shell env setup and export GOOGLE_API_KEY (or GEMINI_API_KEY) before Gemini translation` | |
-| 4.4 | Bootstrap text names the OmniVoice route's `paths.omnivoice_python` | grep output | **PASS** — line 4 mentions `OmniVoice route expects \`paths.omnivoice_python\` to point at a Python with torch + omnivoice installed` | |
-| 4.5 | Bootstrap text names the VoxCPM route's deps | grep output | **PASS** — line 5: `VoxCPM route expects the dub venv to include gradio_client + opencc, and a local VoxCPM server on 127.0.0.1:8808` | |
-| 4.6 | Bootstrap text mentions `tts_engines_dir` override | grep output | **PASS** — line 6 | |
-| 4.7 | Bootstrap text does NOT tell operators to clone any external repo | grep output | **PASS** — no mention of `git clone`, `qwenasr-mlx-cli`, or `OmniVoice` source repos | Standalone contract honored |
+| 4.4 | Bootstrap text says repo-owned wrapper scripts need no extra path config | grep output | **PASS** — line 4: `repo-owned pipeline scripts live under vendor/pipeline_scripts; no extra path config is required` | |
+| 4.5 | Bootstrap text describes the OmniVoice route truthfully | grep output | **PASS** — line 5 says OmniVoice uses the configured Python interpreter (default: `python3`) with required packages installed | |
+| 4.6 | Bootstrap text names the VoxCPM route's deps | grep output | **PASS** — line 6: `VoxCPM route expects the dub venv to include gradio_client + opencc, and a local VoxCPM server on 127.0.0.1:8808` | |
+| 4.7 | Bootstrap text says the only required external secret is the Gemini API key | grep output | **PASS** — line 7 names `GOOGLE_API_KEY / GEMINI_API_KEY` | |
+| 4.8 | Bootstrap text does NOT tell operators to clone any external repo | grep output | **PASS** — no mention of `git clone`, `qwenasr-mlx-cli`, or `OmniVoice` source repos | Standalone contract honored |
 
 ## 5. End-to-end smoke with the fake-backend operator QA env
 
@@ -102,7 +101,7 @@ any private local repos.
 | 5.1 | `dub run` with the fake-backend config finishes all 6 stages | `uv run dub run .tmp_operator_qa/test_short.mp4 --source-lang en --target-lang zh --project-dir /tmp/t6_smoke --config .tmp_operator_qa/operator-config.yaml --yes` | **PASS** — `[01_stems] done`, `[02_asr] done`, `[03_ref_audio] done`, `[04_translate] done`, `[05_tts] done`, `[06_assemble] done`, `run complete` | Translation provider was `mock` so no Gemini key was needed |
 | 5.2 | `dub status` on the resulting project shows all stages `done` | `uv run dub status --project-dir /tmp/t6_smoke` | **PASS** (verified via state file inspection) | |
 | 5.3 | `dub validate` on the resulting project returns 0 | `uv run dub validate --project-dir /tmp/t6_smoke` | **PASS** (asserted in 5.1 — runner smoke is end-to-end) | |
-| 5.4 | The fake-backend env resolves scripts from `paths.skills_dir` (now pointing at `.tmp_operator_qa/fake-skills`) | config + log inspection | **PASS** — `cfg.paths.skills_dir` is a `Path` field, accepts any directory of fake wrapper scripts | This is the same wire contract the public operator uses; only the values are fake. |
+| 5.4 | The fake-backend env resolves scripts through the shared runtime override seam | config + log inspection | **PASS** — the hermetic harness injects `DUB_PIPELINE_SCRIPTS_DIR=.tmp_operator_qa/fake-skills` so repo-owned wrappers resolve to fake scripts during tests | This is a **test-only** seam; public operators normally use the repo default `vendor/pipeline_scripts`. |
 
 ### 5.Doc — operator-facing doc gaps surfaced by the smoke
 
@@ -115,15 +114,16 @@ any private local repos.
 
 | # | Check | File:line | Result | Notes |
 |---|-------|-----------|--------|-------|
-| 6.1 | `PathsConfig` defaults are repo-local, not `~/.hermes/...` | `src/dub/config.py:102-109` | **PASS** | `qwenasr_cli="qwenasr-mlx"`, `omnivoice_python="python3"`, `skills_dir=<repo>/vendor/pipeline_scripts`, `dub_root=<home>/video-dub-cli-runs` |
-| 6.2 | Stage 1 (stems) resolves the vendored script | `src/dub/stages/stems.py:25` (`config.paths.skills_dir / "dubbing_stems.py"`) | **PASS** | Default `skills_dir` now points at `vendor/pipeline_scripts` per 6.1 |
-| 6.3 | Stage 2 (ASR) does not hard-code a `~/.hermes` path | `src/dub/stages/asr.py:27` (`cli = config.paths.qwenasr_cli`) | **PASS** | Default is `qwenasr-mlx`, resolved on `$PATH` |
-| 6.4 | Stage 3 (ref-audio) resolves the vendored script | `src/dub/stages/ref_audio.py:113` | **PASS** | |
-| 6.5 | Stage 4 (translate) is in-process; no shell-out | `src/dub/translator_gemini.py` (entire file) | **PASS** | Reads env var only; no `~/.hermes/.env` fallback (translator_gemini.py:62-89) |
-| 6.6 | Stage 5 (TTS) uses the new `dub.tts_engines` adapter registry | `src/dub/tts_engines/{__init__,contract,diagnostics,omnivoice,voxcpme}.py` | **PASS** | Adapter contract is in place; `dub doctor --tts` reports per-backend readiness |
-| 6.7 | Stage 6 (assemble) resolves vendored loudnorm + remix scripts | `src/dub/stages/assemble.py:113, 170` | **PASS** | |
-| 6.8 | `dub doctor` lives in the CLI, has its own sub-command, and has a `dub-doctor` script entrypoint | `src/dub/cli.py:281-324`, `src/dub/doctor.py:24`, `pyproject.toml:81` | **PASS** | |
-| 6.9 | `dub bootstrap` lives in the CLI, has its own sub-command, and has a `dub-bootstrap` script entrypoint | `src/dub/cli.py:327-336`, `src/dub/bootstrap.py:24`, `pyproject.toml:82` | **PASS** | |
+| 6.1 | `PathsConfig` defaults are repo-local or legacy-compat only, not `~/.hermes/...` | `src/dub/config.py:14-35,110-115` | **PASS** | `omnivoice_python="python3"`, `skills_dir=<repo>/vendor/pipeline_scripts`, `tts_engines_dir=<repo>/vendor/pipeline_scripts`, `dub_root=<home>/video-dub-cli-runs`; `qwenasr_cli` remains only as a legacy optional field |
+| 6.2 | Shared runtime-path helper resolves vendored wrappers from the repo by default | `src/dub/runtime_paths.py:1-39` | **PASS** | Production default is `<repo>/vendor/pipeline_scripts`; tests may override with `DUB_PIPELINE_SCRIPTS_DIR` |
+| 6.3 | Stage 1 (stems) resolves the vendored script through runtime-path helpers | `src/dub/stages/stems.py` | **PASS** | No operator setup is required beyond the repo checkout |
+| 6.4 | Stage 2 (ASR) does not hard-code a `~/.hermes` path | `src/dub/stages/asr.py` | **PASS** | Uses repo-owned stage code plus optional test-only escape hatches |
+| 6.5 | Stage 3 (ref-audio) resolves the vendored script through runtime-path helpers | `src/dub/stages/ref_audio.py` | **PASS** | |
+| 6.6 | Stage 4 (translate) is in-process; no shell-out | `src/dub/translator_gemini.py` (entire file) | **PASS** | Reads env var only; no `~/.hermes/.env` fallback |
+| 6.7 | Stage 5 (TTS) uses the new `dub.tts_engines` adapter registry and now shares the same runtime-path seam | `src/dub/tts_engines/{__init__,contract,diagnostics,omnivoice,voxcpme}.py` | **PASS** | Adapters now resolve wrapper locations via `runtime_paths.pipeline_scripts_dir()` |
+| 6.8 | Stage 6 (assemble) resolves vendored loudnorm + remix scripts through runtime-path helpers | `src/dub/stages/assemble.py` | **PASS** | |
+| 6.9 | `dub doctor` lives in the CLI, has its own sub-command, and has a `dub-doctor` script entrypoint | `src/dub/cli.py:283-334`, `src/dub/doctor.py:14-20`, `pyproject.toml` scripts section | **PASS** | |
+| 6.10 | `dub bootstrap` lives in the CLI, has its own sub-command, and has a `dub-bootstrap` script entrypoint | `src/dub/cli.py:324-333`, `src/dub/bootstrap.py:14-20`, `pyproject.toml` scripts section | **PASS** | |
 
 ## 7. Tests covering the new contract
 
@@ -161,7 +161,7 @@ The original 5 FAIL rows were all **doc / config-template gaps**, not code defec
 
 The remaining caveat is narrower: docs now describe the contract truthfully, but the project still does **not** prescribe one blessed installation command for `qwenasr-mlx` itself. That stays an external-runtime/documentation refinement, not a code blocker for T6.
 
-The 1 PASS-WITH-NOTE is row 3.9 — the doctor does not require `~/.hermes/...`, but its `qwenasr_cli` check does depend on `qwenasr-mlx` being discoverable on `$PATH` (which is the operator's responsibility, not the repo's). This is the R5 risk in the dependency map, still open.
+There are currently no `PASS-WITH-NOTE` rows in the doctor/bootstrap/runtime-path section after the repo-contained runtime cleanup. The remaining open risks are productization/documentation concerns, not mismatches in the current `dub doctor` gate set.
 
 ## Blockers and follow-ups
 
@@ -175,6 +175,8 @@ The 1 PASS-WITH-NOTE is row 3.9 — the doctor does not require `~/.hermes/...`,
 4. **R2 (Demucs install size) — not addressed by T0–T5:** still requires a model download on first run. `dub bootstrap` does not prefetch. Doc-acknowledge only.
 
 5. **R6 (`~/.hermes/.env` fallback) — done by T4:** the active runtime no longer reads it. The dep map text in H9/R6 is now stale and should be updated to say "removed; if operators need a `.env`, set env vars or add a dotenv loader in the next pass."
+
+6. **Docs truth follow-up — done in this pass:** stale references to `qwenasr_cli` and `tts_engines_dir` as active `dub doctor` gates were removed. The current operator-facing truth is `repo_pipeline_scripts` for repo-owned wrappers, plus per-backend TTS readiness details.
 
 ## Verdict
 

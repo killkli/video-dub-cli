@@ -32,8 +32,9 @@ If anything is missing or blocked, the 6-line guidance is:
 uv run dub bootstrap
 ```
 
-That text points at the exact system tool, env var, or TTS backend that
-needs attention. Fix the named gate, then re-run `dub doctor`.
+That text points at the exact system tool, env var, repo-owned wrapper
+directory, or TTS backend that needs attention. Fix the named gate, then
+re-run `dub doctor`.
 
 ---
 
@@ -224,40 +225,40 @@ uv run dub resume --project-dir <path>
 
 ## New failure modes added by the standalone contract
 
-### FR-6: `dub doctor` reports `qwenasr_cli: MISSING`
+### FR-6: `dub doctor` reports `repo_pipeline_scripts: MISSING`
 
 **Symptom:**
 ```
-qwenasr_cli: MISSING (missing)
+repo_pipeline_scripts: MISSING (...)
 ```
 
-**Cause:** `qwenasr-mlx` is not on `$PATH`. The standalone contract
-delegates ASR install to the operator (it is the only known non-PyPI
-runtime dependency).
+**Cause:** the repo-owned wrapper directory could not be found. In the
+normal standalone contract this should resolve to `vendor/pipeline_scripts`
+inside the checked-out repo. This is a repo/worktree problem, not an
+operator backend-install problem.
 
 **Recovery:**
 ```bash
-# Pick one (see QUICKSTART.md for the full list):
+# From the repo root, confirm the vendored wrappers exist
+ls vendor/pipeline_scripts/
 
-# A. pipx (recommended; isolated environment)
-pipx install qwenasr-mlx
-
-# B. pip into the dub venv
-uv pip install qwenasr-mlx
-
-# C. pipx from git, if not on PyPI yet
-pipx install git+https://github.com/<qwenasr-mlx-repo>
+# Re-run doctor from the checked-out repo / uv project
+uv run dub doctor
 ```
 
-Then verify:
+If you are running a hermetic test harness, it may intentionally override
+this location via `DUB_PIPELINE_SCRIPTS_DIR`. That environment variable is
+**test-only** and not part of the normal operator setup.
+
+If the directory is genuinely missing from your checkout, restore it from git:
 ```bash
-which qwenasr-mlx
-uv run dub doctor    # should show qwenasr_cli: OK
+git checkout -- vendor/pipeline_scripts
+uv run dub doctor
 ```
 
-If `qwenasr-mlx` is installed under a different name or path, override
-`paths.qwenasr_cli` in your config (see README's configuration
-cheatsheet).
+Note: `paths.qwenasr_cli` still exists in config only as a legacy
+backward-compatibility field. `dub doctor` no longer uses it as an operator
+readiness gate.
 
 ---
 
