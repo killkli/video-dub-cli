@@ -81,16 +81,11 @@ def test_dub_config_full():
     assert cfg.logging is not None
 
 
-def test_paths_required_fields():
-    """Missing any required path field raises ValidationError."""
-    import pydantic
-    with pytest.raises(pydantic.ValidationError):
-        PathsConfig(
-            # qwenasr_cli missing
-            omnivoice_python=Path("/bin/true"),
-            skills_dir=Path("/tmp"),
-            translation_skill=Path("/bin/true"),
-        )
+def test_paths_config_can_be_constructed_with_repo_defaults():
+    p = PathsConfig()
+    assert p.qwenasr_cli == Path("qwenasr-mlx")
+    assert p.skills_dir.name == "pipeline_scripts"
+    assert p.tts_engines_dir.name == "pipeline_scripts"
 
 
 # ─── load_config tests ──────────────────────────────────────────────────────────
@@ -136,13 +131,13 @@ defaults:
         assert cfg.translation.api_env_var == "GEMINI_API_KEY"
 
 
-def test_load_config_default_file_intercepted():
-    """~/.config/dub/config.yaml is read automatically when present."""
+def test_load_config_accepts_yaml_without_paths_section():
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
-        bad_path = write_yaml(tmp, "no_paths.yaml", "logging:\n  level: DEBUG\n")
-        with pytest.raises(UserError, match="paths section required"):
-            load_config(bad_path)
+        config_path = write_yaml(tmp, "no_paths.yaml", "logging:\n  level: DEBUG\n")
+        cfg = load_config(config_path)
+        assert cfg.logging.level == "DEBUG"
+        assert cfg.paths.skills_dir.name == "pipeline_scripts"
 
 
 def test_load_config_merge_user_config_over_defaults():
@@ -172,9 +167,10 @@ defaults:
         assert cfg.defaults.vocal_gain == 1.0
 
 
-def test_load_config_missing_paths_raises():
+def test_load_config_missing_paths_uses_defaults():
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
         p = write_yaml(tmp, "empty.yaml", "logging:\n  level: DEBUG\n")
-        with pytest.raises(UserError, match="paths section required"):
-            load_config(p)
+        cfg = load_config(p)
+        assert cfg.logging.level == "DEBUG"
+        assert cfg.paths.omnivoice_python == Path("python3")

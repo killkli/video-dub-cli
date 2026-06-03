@@ -12,19 +12,16 @@ from dub.errors import ConfigError, UserError
 
 
 class PathsConfig(BaseModel):
-    qwenasr_cli: Path
-    omnivoice_python: Path
-    skills_dir: Path
+    qwenasr_cli: Path = Path("qwenasr-mlx")
+    omnivoice_python: Path = Path("python3")
+    skills_dir: Path = Path(__file__).resolve().parents[2] / "vendor" / "pipeline_scripts"
     # Legacy only: historical Hermes subtitle-translation script path.
     # Standalone CLI translation now uses `translation.provider/model`.
-    translation_skill: Path
+    translation_skill: Path = Path(__file__).resolve().parents[2] / "src" / "dub" / "translator_gemini.py"
     dub_root: Path = Field(default_factory=lambda: Path.home() / ".hermes")
-    # New (T5 / STAND5): repo-owned TTS engines directory. Defaults
-    # to None so the adapter layer falls back to ``skills_dir`` for
-    # operators who have not migrated. Set this to a directory under
-    # the repo (``vendor/pipeline_scripts``) or any other location
-    # where the OmniVoice / VoxCPM scripts live.
-    tts_engines_dir: Path | None = None
+    # Repo-owned runtime directory. Operators should not need to set this;
+    # it defaults to vendor/pipeline_scripts inside this repo.
+    tts_engines_dir: Path = Path(__file__).resolve().parents[2] / "vendor" / "pipeline_scripts"
 
 
 class TranslationConfig(BaseModel):
@@ -110,8 +107,6 @@ DEFAULT_PATHS = {
 
 def _normalize_raw(raw: dict | None) -> dict:
     data = copy.deepcopy(raw or {})
-    if "paths" not in data:
-        raise UserError("paths section required")
     merged_paths = {**DEFAULT_PATHS, **(data.get("paths") or {})}
     data["paths"] = merged_paths
     return data

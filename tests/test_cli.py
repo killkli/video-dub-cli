@@ -72,8 +72,8 @@ def test_dub_doctor_reports_missing_prereqs(runner, tmp_path):
     )
     result = runner.invoke(main, ["doctor", "--config", str(cfg)])
     assert result.exit_code != 0
-    assert "qwenasr_cli: MISSING" in result.output
-    assert "tts_engines_dir: MISSING" in result.output
+    assert "repo_pipeline_scripts: MISSING" in result.output
+    assert "omnivoice_python: MISSING" in result.output
     assert "tts_backends:" in result.output
     assert "omnivoice: BLOCKED" in result.output
     assert "doctor found missing prerequisites" in result.output
