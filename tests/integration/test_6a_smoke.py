@@ -10,6 +10,7 @@ Validates:
 
 import subprocess
 from pathlib import Path
+import os
 
 import pytest
 
@@ -38,6 +39,9 @@ def test_6a_smoke(tmp_path: Path, fake_qwenasr_config: Path) -> None:
     project_dir = tmp_path / "proj"
 
     # --- Run the full pipeline ---
+    env = dict(os.environ)
+    env["DUB_ASR_TEST_FIXTURE_SRT"] = str(fake_qwenasr_config.parent / "fake-asr.srt")
+    env["DUB_PIPELINE_SCRIPTS_DIR"] = str(fake_qwenasr_config.parent / "fake-skills")
     result = subprocess.run(
         [
             "dub",
@@ -56,6 +60,7 @@ def test_6a_smoke(tmp_path: Path, fake_qwenasr_config: Path) -> None:
         capture_output=True,
         text=True,
         timeout=600,
+        env=env,
     )
     assert result.returncode == 0, (
         f"dub run failed (exit {result.returncode})\nstdout: {result.stdout}\nstderr: {result.stderr}"

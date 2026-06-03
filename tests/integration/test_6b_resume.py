@@ -31,6 +31,9 @@ def test_6b_resume(tmp_path: Path, fake_qwenasr_config: Path) -> None:
     project_dir = tmp_path / "proj"
 
     # --- Phase 1: Start dub run and kill it after a delay ---
+    env = dict(os.environ)
+    env["DUB_ASR_TEST_FIXTURE_SRT"] = str(fake_qwenasr_config.parent / "fake-asr.srt")
+    env["DUB_PIPELINE_SCRIPTS_DIR"] = str(fake_qwenasr_config.parent / "fake-skills")
     proc = subprocess.Popen(
         [
             "dub",
@@ -49,6 +52,7 @@ def test_6b_resume(tmp_path: Path, fake_qwenasr_config: Path) -> None:
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        env=env,
     )
 
     # Wait enough for the pipeline to progress past early stages.
@@ -63,6 +67,7 @@ def test_6b_resume(tmp_path: Path, fake_qwenasr_config: Path) -> None:
         capture_output=True,
         text=True,
         timeout=30,
+        env=env,
     )
     # Status should succeed and show partial progress
     assert status_result.returncode == 0, (
@@ -75,6 +80,7 @@ def test_6b_resume(tmp_path: Path, fake_qwenasr_config: Path) -> None:
         capture_output=True,
         text=True,
         timeout=600,
+        env=env,
     )
     assert resume_result.returncode == 0, (
         f"dub resume failed (exit {resume_result.returncode})\n"

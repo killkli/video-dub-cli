@@ -83,9 +83,14 @@ def test_dub_config_full():
 
 def test_paths_config_can_be_constructed_with_repo_defaults():
     p = PathsConfig()
-    assert p.qwenasr_cli == Path("qwenasr-mlx")
+    # qwenasr_cli is a legacy optional field (the ASR stage is now repo-owned);
+    # the default is None, not a bare CLI name.
+    assert p.qwenasr_cli is None
     assert p.skills_dir.name == "pipeline_scripts"
     assert p.tts_engines_dir.name == "pipeline_scripts"
+    # New test-only ASR escape hatches default to off.
+    assert p.asr_test_fixture_srt is None
+    assert p.asr_test_backend_fail is False
 
 
 # ─── load_config tests ──────────────────────────────────────────────────────────

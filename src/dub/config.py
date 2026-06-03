@@ -12,7 +12,11 @@ from dub.errors import ConfigError, UserError
 
 
 class PathsConfig(BaseModel):
-    qwenasr_cli: Path = Path("qwenasr-mlx")
+    # Legacy only: qwenasr_cli used to point at an external CLI binary. The
+    # stage is now repo-owned (see src/qwenasr_mlx_cli); this field is kept
+    # as an optional, unused knob for backward-compatibility with old YAML
+    # configs. Operators no longer need to set it.
+    qwenasr_cli: Path | None = None
     omnivoice_python: Path = Path("python3")
     skills_dir: Path = Path(__file__).resolve().parents[2] / "vendor" / "pipeline_scripts"
     # Legacy only: historical Hermes subtitle-translation script path.
@@ -22,6 +26,13 @@ class PathsConfig(BaseModel):
     # Repo-owned runtime directory. Operators should not need to set this;
     # it defaults to vendor/pipeline_scripts inside this repo.
     tts_engines_dir: Path = Path(__file__).resolve().parents[2] / "vendor" / "pipeline_scripts"
+    # Test-only escape hatches for the ASR stage. Both default to None and
+    # are no-ops in production. They exist so the integration suite can run
+    # end-to-end without real MLX model weights — see
+    # src/dub/stages/asr.py for the contract and docs/standalone-operator.md
+    # for the operator-facing documentation.
+    asr_test_fixture_srt: Path | None = None
+    asr_test_backend_fail: bool = False
 
 
 class TranslationConfig(BaseModel):
@@ -97,7 +108,6 @@ class DubConfig(BaseModel):
 
 
 DEFAULT_PATHS = {
-    "qwenasr_cli": "qwenasr-mlx",
     "omnivoice_python": "python3",
     "skills_dir": str(Path(__file__).resolve().parents[2] / "vendor" / "pipeline_scripts"),
     "translation_skill": str(Path(__file__).resolve().parents[2] / "src" / "dub" / "translator_gemini.py"),

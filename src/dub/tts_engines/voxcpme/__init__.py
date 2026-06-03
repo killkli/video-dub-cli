@@ -23,7 +23,8 @@ from pathlib import Path
 from typing import Optional
 
 from dub.config import DubConfig
-from dub.tts_engines import ResolvedRoute, engines_dir as builtin_engines_dir, register
+from dub.runtime_paths import pipeline_scripts_dir
+from dub.tts_engines import ResolvedRoute, register
 from dub.tts_engines.contract import TtsReadiness, TtsRoute
 from dub.tts_engines import diagnostics as diag
 
@@ -52,7 +53,7 @@ def find_route(source_lang: str) -> Optional[TtsRoute]:
 
 def engines_dir(config: DubConfig) -> Path:
     _ = config
-    return builtin_engines_dir()
+    return pipeline_scripts_dir()
 
 
 def build_route(config: DubConfig, source_lang: str = "ja") -> ResolvedRoute:

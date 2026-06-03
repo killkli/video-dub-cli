@@ -10,19 +10,22 @@ def fake_qwenasr_config(tmp_path: Path) -> Path:
     skills_dir = tmp_path / "fake-skills"
     skills_dir.mkdir(parents=True, exist_ok=True)
 
-    fake_cli = tmp_path / "fake-qwenasr"
-    fake_cli.write_text(
-        "#!/usr/bin/env python3\n"
-        "import sys\n"
-        "lang = 'en'\n"
-        "for i, arg in enumerate(sys.argv):\n"
-        "    if arg == '--language' and i + 1 < len(sys.argv):\n"
-        "        lang = sys.argv[i + 1]\n"
-        "text = '哈囉，歡迎來到課堂。' if lang in {'zh','ja','en'} else '測試字幕。'\n"
-        "sys.stdout.write('1\\n00:00:00,000 --> 00:00:01,000\\n' + text + '\\n')\n",
+    # ASR is now repo-owned (src/dub/stages/asr.py imports run_transcription
+    # from the vendored qwenasr_mlx_cli package). Real MLX weights can't be
+    # bundled in the integration suite, so we point the stage at a
+    # pre-baked SRT fixture via the DUB_ASR_TEST_FIXTURE_SRT escape hatch
+    # that the stage honours when explicitly set by a test harness.
+    #
+    # The SRT contains Chinese cues (哈囉, 歡迎...) so downstream assertions
+    # such as "SRT contains Chinese characters" pass without running real
+    # ASR. The fixture's en/ja-srt counterpart is read by the fake TTS
+    # scripts to learn the cue count.
+    asr_fixture = tmp_path / "fake-asr.srt"
+    asr_fixture.write_text(
+        "1\n00:00:00,000 --> 00:00:02,000\n哈囉，歡迎來到課堂。\n"
+        "2\n00:00:02,000 --> 00:00:04,000\n這是第二句測試字幕。\n",
         encoding="utf-8",
     )
-    fake_cli.chmod(0o755)
 
     fake_ref = skills_dir / "dubbing_extract_ref.py"
     fake_ref.write_text(
@@ -67,37 +70,6 @@ def fake_qwenasr_config(tmp_path: Path) -> Path:
         encoding="utf-8",
     )
     fake_remix.chmod(0o755)
-
-    # Fake dubbing_assemble_loudnorm.py — stand-in for the canonical
-    # time-aligned builder. The real stage now always passes
-    # --save-normalized-wav <06_tts_wav/tts_normalized.wav>, even when
-    # keep_fulltrack=false. So the fake must both: (1) copy source video to
-    # --output and (2) write a >1000-byte normalized wav to the requested path.
-    fake_loudnorm = skills_dir / "dubbing_assemble_loudnorm.py"
-    fake_loudnorm.write_text(
-        "#!/usr/bin/env python3\n"
-        "import argparse, shutil, sys\n"
-        "from pathlib import Path\n"
-        "p = argparse.ArgumentParser()\n"
-        "p.add_argument('--video', required=True)\n"
-        "p.add_argument('--zh-srt', required=True)\n"
-        "p.add_argument('--tts-dir', required=True)\n"
-        "p.add_argument('--output', required=True)\n"
-        "p.add_argument('--save-normalized-wav', required=True)\n"
-        "args = p.parse_args()\n"
-        "src = Path(args.video)\n"
-        "dst = Path(args.output)\n"
-        "norm = Path(args.save_normalized_wav)\n"
-        "dst.parent.mkdir(parents=True, exist_ok=True)\n"
-        "norm.parent.mkdir(parents=True, exist_ok=True)\n"
-        "if not src.exists():\n"
-        "    sys.stderr.write(f'fake-loudnorm: source missing: {src}\\n')\n"
-        "    sys.exit(2)\n"
-        "shutil.copy2(src, dst)\n"
-        "norm.write_bytes(b'\\x00' * 4096)\n",
-        encoding="utf-8",
-    )
-    fake_loudnorm.chmod(0o755)
 
     # Fake dubbing_assemble_loudnorm.py — stand-in for the real time-aligned
     # loudnorm builder. The stage wires it with:
@@ -232,7 +204,7 @@ def fake_qwenasr_config(tmp_path: Path) -> Path:
     cfg.write_text(
         f"""
 paths:
-  qwenasr_cli: {fake_cli}
+  qwenasr_cli: repo-owned-stage2
   omnivoice_python: /usr/bin/python3
   skills_dir: {skills_dir}
   translation_skill: /bin/true

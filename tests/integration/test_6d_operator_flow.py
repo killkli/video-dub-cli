@@ -27,6 +27,10 @@ def test_6d_operator_flow(tmp_path: Path) -> None:
     if project_dir.exists():
         subprocess.run(["rm", "-rf", str(project_dir)], check=True)
 
+    env = dict(**__import__("os").environ)
+    env["DUB_ASR_TEST_FIXTURE_SRT"] = str(qa_root / "fake-asr.srt")
+    env["DUB_PIPELINE_SCRIPTS_DIR"] = str(qa_root / "fake-skills")
+
     run_result = subprocess.run(
         [
             "dub", "run", str(video),
@@ -39,6 +43,7 @@ def test_6d_operator_flow(tmp_path: Path) -> None:
         cwd=ROOT,
         capture_output=True,
         text=True,
+        env=env,
     )
     assert run_result.returncode == 0, run_result.stderr or run_result.stdout
 
@@ -76,6 +81,7 @@ def test_6d_operator_flow(tmp_path: Path) -> None:
         cwd=ROOT,
         capture_output=True,
         text=True,
+        env=env,
     )
     assert resume_result.returncode == 0, resume_result.stderr or resume_result.stdout
     assert "resume complete:" in resume_result.stdout

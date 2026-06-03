@@ -23,7 +23,8 @@ from pathlib import Path
 from typing import Optional
 
 from dub.config import DubConfig
-from dub.tts_engines import ResolvedRoute, engines_dir as builtin_engines_dir, register
+from dub.runtime_paths import pipeline_scripts_dir
+from dub.tts_engines import ResolvedRoute, register
 from dub.tts_engines.contract import TtsReadiness, TtsRoute
 from dub.tts_engines import diagnostics as diag
 
@@ -60,12 +61,11 @@ def find_route(source_lang: str) -> Optional[TtsRoute]:
 def engines_dir(config: DubConfig) -> Path:
     """Where the OmniVoice runtime wrapper lives.
 
-    The wrapper is now repo-owned and resolved from the installed checkout.
-    ``config`` is kept for signature compatibility with the backend
-    registry, but operators no longer need to point at a custom scripts dir.
+    Defaults to the repo-owned vendored scripts dir, but test harnesses may
+    override it via ``DUB_PIPELINE_SCRIPTS_DIR`` through runtime_paths.
     """
     _ = config
-    return builtin_engines_dir()
+    return pipeline_scripts_dir()
 
 
 def build_route(config: DubConfig, source_lang: str = "en") -> ResolvedRoute:

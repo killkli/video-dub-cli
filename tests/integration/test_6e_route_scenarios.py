@@ -12,6 +12,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 from pathlib import Path
+import os
 
 import pytest
 
@@ -25,6 +26,16 @@ def _run_dub(
     config_path: Path,
     *extra_args: str,
 ) -> subprocess.CompletedProcess[str]:
+    cfg_text = config_path.read_text(encoding="utf-8")
+    skills_dir = None
+    for line in cfg_text.splitlines():
+        if line.strip().startswith("skills_dir:"):
+            skills_dir = line.split(":", 1)[1].strip()
+            break
+    env = dict(os.environ)
+    env["DUB_ASR_TEST_FIXTURE_SRT"] = str(config_path.parent / "fake-asr.srt")
+    if skills_dir:
+        env["DUB_PIPELINE_SCRIPTS_DIR"] = skills_dir
     return subprocess.run(
         [
             "dub",
@@ -40,6 +51,7 @@ def _run_dub(
         capture_output=True,
         text=True,
         timeout=600,
+        env=env,
     )
 
 

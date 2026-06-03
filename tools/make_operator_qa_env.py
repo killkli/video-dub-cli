@@ -160,6 +160,13 @@ def main() -> None:
         encoding="utf-8",
     )
 
+    asr_fixture = OUT / "fake-asr.srt"
+    asr_fixture.write_text(
+        "1\n00:00:00,000 --> 00:00:02,000\nHello and welcome.\n"
+        "2\n00:00:02,000 --> 00:00:04,000\nThis is the second test subtitle.\n",
+        encoding="utf-8",
+    )
+
     cfg = OUT / "operator-config.yaml"
     cfg.write_text(
         f"""
