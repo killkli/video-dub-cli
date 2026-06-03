@@ -94,46 +94,10 @@ class StemsStage(Stage):
         return self.mark_done(artifacts=["vocals.wav", "instrumental.wav"], output_dir="02_stems")
 
 
-class ASRStage(Stage):
-    name = "02_asr"
-
-    def is_done(self, project_dir: Path) -> bool:
-        srt_path = project_dir / "03_asr" / "video.srt"
-        return srt_path.exists()
-
-    def run(self, project_dir: Path, config: DubConfig) -> StageState:
-        input_video = project_dir / "01_raw_video" / "video.mp4"
-        srt_out = project_dir / "03_asr" / "video.srt"
-        log_file = project_dir / ".dub" / f"{self.name}.log"
-        cli = config.paths.qwenasr_cli
-
-        srt_out.parent.mkdir(parents=True, exist_ok=True)
-        log_file.parent.mkdir(parents=True, exist_ok=True)
-
-        cmd = [
-            str(cli),
-            "transcribe",
-            str(input_video),
-            "--output-format",
-            "srt",
-        ]
-        if config.defaults.source_lang:
-            cmd += ["--language", config.defaults.source_lang]
-
-        with open(srt_out, "w", encoding="utf-8") as out_fh, open(log_file, "w", encoding="utf-8") as log_fh:
-            result = subprocess.run(
-                cmd,
-                stdout=out_fh,
-                stderr=log_fh,
-                text=True,
-                check=False,
-            )
-
-        if result.returncode != 0:
-            return self.mark_failed(f"qwenasr-mlx exited with code {result.returncode}; see {log_file}")
-        if not srt_out.exists() or not srt_out.read_text(encoding="utf-8").strip():
-            return self.mark_failed(f"qwenasr-mlx produced empty SRT; see {log_file}")
-        return self.mark_done(artifacts=["video.srt"], output_dir="03_asr")
+# ASRStage is defined canonically in dub.stages.asr. We re-export it here
+# so existing import paths (dub.stages.base.ASRStage) keep working while
+# the repo converges on a single Stage 2 implementation.
+from dub.stages.asr import AsrStage as ASRStage  # noqa: E402,F401
 
 
 # RefAudioStage is defined canonically in dub.stages.ref_audio (real wire:
