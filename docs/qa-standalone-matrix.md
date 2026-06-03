@@ -98,7 +98,7 @@ any private local repos.
 
 | # | Check | Command | Result | Notes |
 |---|-------|---------|--------|-------|
-| 5.1 | `dub run` with the fake-backend config finishes all 6 stages | `uv run dub run .tmp_operator_qa/test_short.mp4 --source-lang en --target-lang zh --project-dir /tmp/t6_smoke --config .tmp_operator_qa/operator-config.yaml --yes` | **PASS** — `[01_stems] done`, `[02_asr] done`, `[03_ref_audio] done`, `[04_translate] done`, `[05_tts] done`, `[06_assemble] done`, `run complete` | Translation provider was `mock` so no Gemini key was needed |
+| 5.1 | `dub en2zh` with the fake-backend config finishes all 6 stages | `uv run dub en2zh .tmp_operator_qa/test_short.mp4 --project-dir /tmp/t6_smoke --config .tmp_operator_qa/operator-config.yaml --yes` | **PASS** — `[01_stems] done`, `[02_asr] done`, `[03_ref_audio] done`, `[04_translate] done`, `[05_tts] done`, `[06_assemble] done`, `run complete` | Translation provider was `mock` so no Gemini key was needed |
 | 5.2 | `dub status` on the resulting project shows all stages `done` | `uv run dub status --project-dir /tmp/t6_smoke` | **PASS** (verified via state file inspection) | |
 | 5.3 | `dub validate` on the resulting project returns 0 | `uv run dub validate --project-dir /tmp/t6_smoke` | **PASS** (asserted in 5.1 — runner smoke is end-to-end) | |
 | 5.4 | The fake-backend env resolves scripts through the shared runtime override seam | config + log inspection | **PASS** — the hermetic harness injects `DUB_PIPELINE_SCRIPTS_DIR=.tmp_operator_qa/fake-skills` so repo-owned wrappers resolve to fake scripts during tests | This is a **test-only** seam; public operators normally use the repo default `vendor/pipeline_scripts`. |

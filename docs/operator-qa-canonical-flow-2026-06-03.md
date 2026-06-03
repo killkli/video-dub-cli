@@ -8,7 +8,7 @@
 
 This QA pass verifies the narrowest truthful operator-facing claim for the current CLI:
 
-- a **single `dub run` command** can complete end to end
+- a **single operator command** can complete end to end
 - using the **repo-contained standalone runtime contract**
 - on the **fake-backend operator QA environment**
 - for **English → Chinese** with `translate-mode=delegate`
@@ -54,10 +54,8 @@ python tools/make_operator_qa_env.py
 export DUB_ASR_TEST_FIXTURE_SRT=/Users/johnchen/.hermes/projects/video-dub-cli/.tmp_operator_qa/fake-asr.srt
 export DUB_PIPELINE_SCRIPTS_DIR=/Users/johnchen/.hermes/projects/video-dub-cli/.tmp_operator_qa/fake-skills
 
-dub run \
+dub en2zh \
   /Users/johnchen/.hermes/projects/video-dub-cli/.tmp_operator_qa/test_short.mp4 \
-  --source-lang en \
-  --target-lang zh \
   --project-dir /Users/johnchen/.hermes/projects/video-dub-cli/.tmp_operator_qa/op_proj_canonical_qa \
   --config /Users/johnchen/.hermes/projects/video-dub-cli/.tmp_operator_qa/operator-config.yaml \
   --yes
@@ -162,7 +160,7 @@ This confirms:
 
 The project can truthfully claim the following:
 
-1. `dub run` is a valid single-command operator entrypoint for the supported contract.
+1. `dub en2zh` is a valid single-command operator entrypoint for the supported contract.
 2. The standalone repo-contained runtime works end to end without external clone-time path dependencies.
 3. `dub status` and `dub validate` are viable operator follow-up commands after a run.
 4. The CLI now prints a clearer preflight route summary:

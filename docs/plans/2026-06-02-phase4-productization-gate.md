@@ -33,7 +33,7 @@ From the repo working tree on `feature/video-dub-cli-phase-next-productization`:
 - `dub validate` enforces translated-subtitle contract
 - `dub resume` restores `source_lang` / `target_lang` / `translate_mode` from state (per uncommitted diff in working tree)
 - Gemini route: now accepts labeled `[index] text` output and falls back to plain lines (`translator_gemini._parse_labeled_translation_lines`)
-- operator QA record: `docs/operator-qa-supported-flow-2026-06-02.md` (en→zh, fake backend)
+- operator QA record: `docs/operator-qa-canonical-flow-2026-06-03.md` (en→zh, fake backend; alias-era canonical note)
 - release / handoff checklist: `docs/release-handoff-checklist.md`
 
 Uncommitted changes in working tree (must not be lost when P4 cards promote):
@@ -190,7 +190,7 @@ dub validate --project-dir DIR
 **README / QUICKSTART / runbook contract (P4-T4 owns):**
 
 1. README MUST list the three supported scenarios (`delegate`, `use-existing`, `skip`) in a matrix with the exact one-line command for each, and the exact limitation for `skip`.
-2. README MUST link to `docs/operator-qa-supported-flow-2026-06-02.md` so an operator can see a real run record.
+2. README MUST link to `docs/operator-qa-canonical-flow-2026-06-03.md` so an operator can see a real run record.
 3. QUICKSTART MUST walk a fresh operator through: copy example config → run `dub run <video>` → read `status` / `validate` → locate final MP4.
 4. A new `docs/operator-runbook.md` MUST enumerate:
    - how to read `state.json`

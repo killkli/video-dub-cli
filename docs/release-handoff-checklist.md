@@ -11,7 +11,9 @@
 
 ## 2. CLI surface
 
-- [ ] `dub --help` 可正常顯示
+- [ ] `dub --help` 可正常顯示，且列出 `en2zh` / `ja2zh`
+- [ ] `dub en2zh --help` 可正常顯示
+- [ ] `dub ja2zh --help` 可正常顯示
 - [ ] `dub run --help` 可正常顯示
 - [ ] `dub resume --help` 可正常顯示
 - [ ] `dub status --help` 可正常顯示
@@ -20,9 +22,9 @@
 
 ## 3. Supported scenario contract
 
-目前應明確以這三類情境為主：
+目前應明確以這三類情境為主，其中 operator 主入口已是 alias commands：
 
-- [ ] `delegate`：fresh run，由 CLI 直接執行翻譯 stage
+- [ ] `delegate`：fresh run，由 CLI 直接執行翻譯 stage；常見 operator 入口為 `dub en2zh` / `dub ja2zh`
 - [ ] `use-existing`：使用外部已翻譯 SRT
 - [ ] `skip`：僅限既有 project，且 canonical translated subtitle 已存在
 
@@ -50,7 +52,8 @@ pytest tests/integration/test_6e_route_scenarios.py -q
 
 如要做文件級 operator 驗證，參考：
 
-- `docs/operator-qa-supported-flow-2026-06-02.md`
+- `docs/operator-qa-canonical-flow-2026-06-03.md`（目前 canonical fake-backend support-boundary 記錄）
+- `docs/real-backend-verification-gate-2026-06-03.md`（real-backend 尚待完成的驗證閘門與非宣稱邊界）
 
 ## 5. Config / examples
 
@@ -72,9 +75,9 @@ pytest tests/integration/test_6e_route_scenarios.py -q
 如果要接續下一輪工作，建議優先順序：
 
 1. 真實 backend 小樣本 operator QA（非 fake）
-2. README / QUICKSTART 再收斂為更短的操作者入口
-3. release smoke script：一鍵跑 help + integration + operator QA
-4. 失敗場景 handoff：整理常見錯誤與修復手冊
+2. release smoke script：一鍵跑 help + integration + operator QA
+3. 失敗場景 handoff：整理常見錯誤與修復手冊
+4. 若 alias commands 再擴充，README / QUICKSTART / runbook / checklist 要同波更新
 
 ## 8. Handoff verdict template
 
@@ -82,6 +85,7 @@ pytest tests/integration/test_6e_route_scenarios.py -q
 
 ```text
 video-dub-cli 目前已具備 operator-grade single-command workflow。
+常見 operator 主入口為 `dub en2zh` / `dub ja2zh`；`dub run` 保留作進階底層入口。
 已驗證的支援情境包括 delegate / use-existing / existing-project skip。
 state / validate / integration coverage 已對齊。
 尚未宣稱為 fully productized，因為真實 backend 品質驗證與陌生片源成功率仍待補強。

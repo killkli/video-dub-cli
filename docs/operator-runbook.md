@@ -181,6 +181,9 @@ uv run dub run <video> \
   --translated-srt /path/to/translated.srt
 
 # Option B: let CLI translate (delegate mode, default)
+uv run dub en2zh <video>
+
+# Advanced/base entrypoint (explicit language control)
 uv run dub run <video> --source-lang en --target-lang zh
 ```
 
@@ -367,7 +370,10 @@ today, but operators should be aware:
 ## Quick Reference: CLI Commands
 
 ```bash
-# Run pipeline
+# Run pipeline (common operator path)
+uv run dub en2zh <video>
+
+# Advanced/base entrypoint
 uv run dub run <video> --source-lang en --target-lang zh
 
 # Check status

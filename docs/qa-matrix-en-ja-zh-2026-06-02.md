@@ -3,7 +3,8 @@
 **Date:** 2026-06-02
 **Scope:** Contract 2 (artifact contract) + Contract 3 (failure-recovery contract) from `docs/plans/2026-06-02-phase4-productization-gate.md`
 **References:**
-- Operator QA record: `docs/operator-qa-supported-flow-2026-06-02.md`
+- Operator QA record: `docs/operator-qa-canonical-flow-2026-06-03.md`
+- Real-backend gate: `docs/real-backend-verification-gate-2026-06-03.md`
 - Release handoff checklist: `docs/release-handoff-checklist.md`
 - State model: `src/dub/state.py` — `STAGE_NAMES = ["01_stems","02_asr","03_ref_audio","04_translate","05_tts","06_assemble"]`
 - Config: `src/dub/config.py` — `TranslationConfig.mode ∈ {delegate, skip, use-existing}`

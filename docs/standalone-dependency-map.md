@@ -13,7 +13,7 @@ A new user can use `video-dub-cli` end-to-end via:
     git clone <repo>
     uv sync                       # or pip install -e ".[all]"
     uv run dub doctor             # readiness check
-    uv run dub run talk.mp4 --source-lang en --target-lang zh
+    uv run dub en2zh talk.mp4
 
 without cloning any other source repo, without pointing config at a
 Hermes skill directory, and without owning a separate Python venv per
