@@ -12,6 +12,9 @@ from dub.errors import UserError
 from dub.project import STAGE_DIRS, create_project, initialize_project, project_input_info
 from dub.runner import run_pipeline
 from dub.state import load_state, new_state, save_state
+from dub.tts_engines import builtin_backends
+from dub.tts_engines.omnivoice import readiness as omnivoice_readiness
+from dub.tts_engines.voxcpme import readiness as voxcpme_readiness
 
 
 def _prepare_project(video: Path, project_dir: str | None, cfg) -> Path:
@@ -290,8 +293,9 @@ def doctor(config_path):
     checks.append(("qwenasr_cli", qwen_ok, qwen_detail))
     py_ok, py_detail = _which_status(str(cfg.paths.omnivoice_python))
     checks.append(("omnivoice_python", py_ok, py_detail))
-    skills_ok, skills_detail = _path_status(cfg.paths.skills_dir)
-    checks.append(("vendor_pipeline_scripts", skills_ok, skills_detail))
+    tts_dir = cfg.paths.tts_engines_dir or cfg.paths.skills_dir
+    skills_ok, skills_detail = _path_status(tts_dir)
+    checks.append(("tts_engines_dir", skills_ok, skills_detail))
     gemini_ok, gemini_detail = _env_status(cfg.translation.api_env_var, "GOOGLE_API_KEY", "GEMINI_API_KEY")
     checks.append(("gemini_api_key", gemini_ok, gemini_detail))
 
@@ -301,6 +305,18 @@ def doctor(config_path):
         click.echo(f"{name}: {status} ({detail})")
         if not ok:
             all_ok = False
+
+    readiness_by_backend = {
+        "omnivoice": omnivoice_readiness(cfg),
+        "voxcpme": voxcpme_readiness(cfg),
+    }
+    click.echo("tts_backends:")
+    for backend_name in builtin_backends():
+        readiness = readiness_by_backend[backend_name]
+        status = "READY" if readiness.ready else "BLOCKED"
+        click.echo(f"  {backend_name}: {status} ({readiness.detail})")
+        for gate, gate_status, detail in readiness.checks:
+            click.echo(f"    - {gate}: {gate_status} ({detail})")
 
     if all_ok:
         click.echo("doctor ok: standalone prerequisites look ready")
@@ -315,4 +331,6 @@ def bootstrap():
     click.echo("bootstrap: install system tools ffmpeg/ffprobe before real media runs")
     click.echo("bootstrap: copy `.env.example` to your shell env setup and export GOOGLE_API_KEY (or GEMINI_API_KEY) before Gemini translation")
     click.echo("bootstrap: non-TTS pipeline scripts are now repo-owned under vendor/pipeline_scripts")
-    click.echo("bootstrap: TTS/model backend preparation is route-specific and will be expanded in later standalone phases")
+    click.echo("bootstrap: OmniVoice route expects `paths.omnivoice_python` to point at a Python with torch + omnivoice installed")
+    click.echo("bootstrap: VoxCPM route expects the dub venv to include gradio_client + opencc, and a local VoxCPM server on 127.0.0.1:8808")
+    click.echo("bootstrap: set `paths.tts_engines_dir` if your TTS wrapper scripts are not in vendor/pipeline_scripts")

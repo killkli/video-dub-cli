@@ -15,11 +15,13 @@ def test_tts_stage_uses_ja_route_for_japanese_source(tmp_path):
     (tmp_path / "dubbing_batch_tts_vox.py").write_text("#!/usr/bin/env python3\n", encoding="utf-8")
     cfg.defaults.source_lang = "ja"
 
-    script, src_flag, needs_project_dir = TtsStage()._resolve_route(cfg.defaults.source_lang, cfg.paths.skills_dir)
+    script, src_flag, needs_project_dir, py, backend_name = TtsStage()._resolve_route(cfg)
 
     assert script.name == "dubbing_batch_tts_vox.py"
     assert src_flag == "--ja-srt"
     assert needs_project_dir is True
+    assert py.name
+    assert backend_name == "voxcpme"
 
 
 class DummyResult:

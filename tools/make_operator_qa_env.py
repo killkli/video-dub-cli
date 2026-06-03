@@ -167,8 +167,15 @@ paths:
   qwenasr_cli: {fake_cli}
   omnivoice_python: /usr/bin/python3
   skills_dir: {SKILLS}
+  tts_engines_dir: {SKILLS}
   translation_skill: {translator}
   dub_root: /path/to/dub-root
+
+translation:
+  provider: mock
+  model: mock-offline
+  api_env_var: GOOGLE_API_KEY
+  temperature: 0.0
 
 defaults:
   source_lang: en

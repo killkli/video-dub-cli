@@ -19,6 +19,12 @@ class PathsConfig(BaseModel):
     # Standalone CLI translation now uses `translation.provider/model`.
     translation_skill: Path
     dub_root: Path = Field(default_factory=lambda: Path.home() / ".hermes")
+    # New (T5 / STAND5): repo-owned TTS engines directory. Defaults
+    # to None so the adapter layer falls back to ``skills_dir`` for
+    # operators who have not migrated. Set this to a directory under
+    # the repo (``vendor/pipeline_scripts``) or any other location
+    # where the OmniVoice / VoxCPM scripts live.
+    tts_engines_dir: Path | None = None
 
 
 class TranslationConfig(BaseModel):

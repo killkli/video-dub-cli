@@ -44,6 +44,7 @@ from pathlib import Path
 from dub.config import DubConfig
 from dub.state import now_iso
 from dub.stages.base import Stage, StageState
+from dub.tts_engines import get_factory
 
 
 # Reuse the SRT-cue counter from ref_audio. The two stages need to agree
@@ -54,15 +55,9 @@ from dub.stages.ref_audio import _count_srt_cues  # noqa: E402
 # a 200-byte placeholder the same way the script would on a re-run.
 _TTS_MIN_BYTES = 1000
 
-# Routes: source_lang → (script, source_srt_flag, needs_project_dir)
-#
-# OmniVoice (en) uses --en-srt because the script was originally written
-# for an English source. VoxCPM (ja) uses --ja-srt and additionally
-# requires --project-dir for its own path resolution / defaults. Any other
-# source_lang defaults to OmniVoice for safety.
-_ROUTES: dict[str, tuple[str, str, bool]] = {
-    "en": ("dubbing_batch_tts.py", "--en-srt", False),
-    "ja": ("dubbing_batch_tts_vox.py", "--ja-srt", True),
+_BACKEND_BY_SOURCE_LANG: dict[str, str] = {
+    "en": "omnivoice",
+    "ja": "voxcpme",
 }
 
 
@@ -115,15 +110,29 @@ class TtsStage(Stage):
                 return False
         return True
 
-    def _resolve_route(self, source_lang: str, skills_dir: Path) -> tuple[Path, str, bool]:
-        """Return (script_path, source_srt_flag, needs_project_dir) for the
-        given source_lang.
+    def _resolve_route(self, config: DubConfig) -> tuple[Path, str, bool, Path, str]:
+        """Resolve the concrete TTS runtime route via the adapter registry.
 
-        Unknown source_langs fall back to the OmniVoice (en) route so the
-        pipeline still attempts something rather than failing closed.
+        Returns:
+          (script_path, source_srt_flag, needs_project_dir, interpreter, backend_name)
+
+        Unknown source languages fall back to the OmniVoice adapter, whose
+        route table includes a '*' catch-all.
         """
-        script_name, src_flag, needs_project_dir = _ROUTES.get(source_lang, _ROUTES["en"])
-        return skills_dir / script_name, src_flag, needs_project_dir
+        source_lang = config.defaults.source_lang
+        backend_name = _BACKEND_BY_SOURCE_LANG.get(source_lang, "omnivoice")
+        factory = get_factory(backend_name)
+        try:
+            resolved = factory(config, source_lang=source_lang)
+        except TypeError:
+            resolved = factory(config)
+        return (
+            resolved.script_path,
+            resolved.source_srt_flag,
+            resolved.needs_project_dir,
+            resolved.interpreter,
+            resolved.backend_name,
+        )
 
     def _build_cmd(self, py: Path, script: Path, needs_project_dir: bool,
                    zh_srt: Path, asr_srt: Path, src_flag: str,
@@ -265,22 +274,12 @@ class TtsStage(Stage):
         # left a stale log behind, we replace it.
         log_file.write_text("", encoding="utf-8")
 
-        script, src_flag, needs_project_dir = self._resolve_route(
-            config.defaults.source_lang, config.paths.skills_dir
-        )
+        script, src_flag, needs_project_dir, py, backend_name = self._resolve_route(config)
         if not script.exists():
             state.status = "failed"
             state.finished_at = now_iso()
-            state.error = f"TTS script not found: {script}"
+            state.error = f"TTS backend {backend_name} script not found: {script}"
             return state
-
-        # The two scripts share this flag set. The interpreter matters:
-        # OmniVoice must run under its own venv (torch + omnivoice pkg);
-        # VoxCPM runs under the project venv (gradio_client + opencc).
-        # We default to omnivoice_python for both — the VoxCPM script
-        # doesn't import torch, so a python with gradio_client also works
-        # fine, and pinning one interpreter keeps the stage deterministic.
-        py = config.paths.omnivoice_python
         cmd = self._build_cmd(
             py, script, needs_project_dir,
             zh_srt, asr_srt, src_flag, ref_dir, tts_dir, project_dir,
@@ -290,7 +289,7 @@ class TtsStage(Stage):
             state.status = "failed"
             state.finished_at = now_iso()
             state.error = (
-                f"{script.name} exited with code {rc}; see {log_file}"
+                f"{backend_name}:{script.name} exited with code {rc}; see {log_file}"
             )
             return state
 
@@ -324,7 +323,7 @@ class TtsStage(Stage):
             state.status = "failed"
             state.finished_at = now_iso()
             state.error = (
-                f"{script.name} produced {len(produced)}/{expected} tts wavs; "
+                f"{backend_name}:{script.name} produced {len(produced)}/{expected} tts wavs; "
                 f"missing or too small: {', '.join(missing)}; see {log_file}"
             )
             return state
