@@ -250,3 +250,56 @@ def test_6e_ja_route_uses_vox_script_contract(
     )
     assert validate.returncode == 0, validate.stderr or validate.stdout
     assert "mode=delegate translate_status=done" in validate.stdout
+
+
+@pytest.mark.integration
+def test_6e_en2zh_alias_runs_supported_fake_backend_flow(
+    tmp_path: Path,
+    fake_qwenasr_config: Path,
+) -> None:
+    if not TEST_SHORT.exists():
+        pytest.skip(f"Fixture not found: {TEST_SHORT}")
+
+    cfg_text = fake_qwenasr_config.read_text(encoding="utf-8")
+    skills_dir = None
+    for line in cfg_text.splitlines():
+        if line.strip().startswith("skills_dir:"):
+            skills_dir = line.split(":", 1)[1].strip()
+            break
+
+    env = dict(os.environ)
+    env["DUB_ASR_TEST_FIXTURE_SRT"] = str(fake_qwenasr_config.parent / "fake-asr.srt")
+    if skills_dir:
+        env["DUB_PIPELINE_SCRIPTS_DIR"] = skills_dir
+
+    project_dir = tmp_path / "en2zh-alias-proj"
+    result = subprocess.run(
+        [
+            "dub",
+            "en2zh",
+            str(TEST_SHORT),
+            "--project-dir",
+            str(project_dir),
+            "--config",
+            str(fake_qwenasr_config),
+            "--yes",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=600,
+        env=env,
+    )
+
+    assert result.returncode == 0, result.stderr or result.stdout
+    assert f"preflight: src=en tgt=zh project={project_dir}" in result.stdout
+    assert "translate=delegate provider=mock" in result.stdout
+    assert f"run complete: project={project_dir}" in result.stdout
+
+    validate = subprocess.run(
+        ["dub", "validate", "--project-dir", str(project_dir)],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert validate.returncode == 0, validate.stderr or validate.stdout
+    assert "mode=delegate translate_status=done" in validate.stdout

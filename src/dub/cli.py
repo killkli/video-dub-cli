@@ -146,26 +146,20 @@ def main():
     pass
 
 
-@main.command()
-@click.argument("video", type=click.Path(exists=True, path_type=Path))
-@click.option("--source-lang", "source_lang", default=None)
-@click.option("--target-lang", "target_lang", default=None)
-@click.option("--project-dir", type=click.Path(path_type=Path), default=None)
-@click.option("--config", "config_path", type=click.Path(path_type=Path), default=None)
-@click.option(
-    "--translate-mode",
-    type=click.Choice(["delegate", "skip", "use-existing"]),
-    default="delegate",
-)
-@click.option("--translated-srt", type=click.Path(path_type=Path), default=None)
-@click.option("--vocal-gain", type=float, default=None)
-@click.option("--inst-gain", type=float, default=None)
-@click.option("--keep-fulltrack", is_flag=True, default=False)
-@click.option("--yes", "-y", is_flag=True, default=False)
-def run(video, source_lang, target_lang, project_dir, config_path,
-        translate_mode, translated_srt, vocal_gain, inst_gain,
-        keep_fulltrack, yes):
-    """Run full dubbing pipeline. VIDEO is the source mp4 path."""
+def _run_pipeline_command(
+    video: Path,
+    *,
+    source_lang: str | None,
+    target_lang: str | None,
+    project_dir: Path | None,
+    config_path: Path | None,
+    translate_mode: str,
+    translated_srt: Path | None,
+    vocal_gain: float | None,
+    inst_gain: float | None,
+    keep_fulltrack: bool,
+    yes: bool,
+) -> None:
     try:
         cfg = load_config(config_path)
         cfg = cfg.merge_cli_overrides(
@@ -186,6 +180,103 @@ def run(video, source_lang, target_lang, project_dir, config_path,
     except UserError as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(_completion_summary("run complete", pdir))
+
+
+@main.command()
+@click.argument("video", type=click.Path(exists=True, path_type=Path))
+@click.option("--source-lang", "source_lang", default=None)
+@click.option("--target-lang", "target_lang", default=None)
+@click.option("--project-dir", type=click.Path(path_type=Path), default=None)
+@click.option("--config", "config_path", type=click.Path(path_type=Path), default=None)
+@click.option(
+    "--translate-mode",
+    type=click.Choice(["delegate", "skip", "use-existing"]),
+    default="delegate",
+)
+@click.option("--translated-srt", type=click.Path(path_type=Path), default=None)
+@click.option("--vocal-gain", type=float, default=None)
+@click.option("--inst-gain", type=float, default=None)
+@click.option("--keep-fulltrack", is_flag=True, default=False)
+@click.option("--yes", "-y", is_flag=True, default=False)
+def run(video, source_lang, target_lang, project_dir, config_path,
+        translate_mode, translated_srt, vocal_gain, inst_gain,
+        keep_fulltrack, yes):
+    """Run full dubbing pipeline. VIDEO is the source mp4 path."""
+    _run_pipeline_command(
+        video,
+        source_lang=source_lang,
+        target_lang=target_lang,
+        project_dir=project_dir,
+        config_path=config_path,
+        translate_mode=translate_mode,
+        translated_srt=translated_srt,
+        vocal_gain=vocal_gain,
+        inst_gain=inst_gain,
+        keep_fulltrack=keep_fulltrack,
+        yes=yes,
+    )
+
+
+@main.command(name="en2zh")
+@click.argument("video", type=click.Path(exists=True, path_type=Path))
+@click.option("--project-dir", type=click.Path(path_type=Path), default=None)
+@click.option("--config", "config_path", type=click.Path(path_type=Path), default=None)
+@click.option(
+    "--translate-mode",
+    type=click.Choice(["delegate", "skip", "use-existing"]),
+    default="delegate",
+)
+@click.option("--translated-srt", type=click.Path(path_type=Path), default=None)
+@click.option("--vocal-gain", type=float, default=None)
+@click.option("--inst-gain", type=float, default=None)
+@click.option("--keep-fulltrack", is_flag=True, default=False)
+@click.option("--yes", "-y", is_flag=True, default=False)
+def en2zh(video, project_dir, config_path, translate_mode, translated_srt, vocal_gain, inst_gain, keep_fulltrack, yes):
+    """Run the common English→Chinese operator flow."""
+    _run_pipeline_command(
+        video,
+        source_lang="en",
+        target_lang="zh",
+        project_dir=project_dir,
+        config_path=config_path,
+        translate_mode=translate_mode,
+        translated_srt=translated_srt,
+        vocal_gain=vocal_gain,
+        inst_gain=inst_gain,
+        keep_fulltrack=keep_fulltrack,
+        yes=yes,
+    )
+
+
+@main.command(name="ja2zh")
+@click.argument("video", type=click.Path(exists=True, path_type=Path))
+@click.option("--project-dir", type=click.Path(path_type=Path), default=None)
+@click.option("--config", "config_path", type=click.Path(path_type=Path), default=None)
+@click.option(
+    "--translate-mode",
+    type=click.Choice(["delegate", "skip", "use-existing"]),
+    default="delegate",
+)
+@click.option("--translated-srt", type=click.Path(path_type=Path), default=None)
+@click.option("--vocal-gain", type=float, default=None)
+@click.option("--inst-gain", type=float, default=None)
+@click.option("--keep-fulltrack", is_flag=True, default=False)
+@click.option("--yes", "-y", is_flag=True, default=False)
+def ja2zh(video, project_dir, config_path, translate_mode, translated_srt, vocal_gain, inst_gain, keep_fulltrack, yes):
+    """Run the common Japanese→Chinese operator flow."""
+    _run_pipeline_command(
+        video,
+        source_lang="ja",
+        target_lang="zh",
+        project_dir=project_dir,
+        config_path=config_path,
+        translate_mode=translate_mode,
+        translated_srt=translated_srt,
+        vocal_gain=vocal_gain,
+        inst_gain=inst_gain,
+        keep_fulltrack=keep_fulltrack,
+        yes=yes,
+    )
 
 
 @main.command(name="resume")

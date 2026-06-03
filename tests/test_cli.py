@@ -22,6 +22,25 @@ def test_dub_run_help_exits_zero(runner):
     assert "VIDEO is the source mp4 path" in result.output
 
 
+def test_dub_help_lists_one_shot_aliases(runner):
+    result = runner.invoke(main, ["--help"])
+    assert result.exit_code == 0
+    assert "en2zh" in result.output
+    assert "ja2zh" in result.output
+
+
+def test_dub_en2zh_help_exits_zero(runner):
+    result = runner.invoke(main, ["en2zh", "--help"])
+    assert result.exit_code == 0
+    assert "English→Chinese" in result.output
+
+
+def test_dub_ja2zh_help_exits_zero(runner):
+    result = runner.invoke(main, ["ja2zh", "--help"])
+    assert result.exit_code == 0
+    assert "Japanese→Chinese" in result.output
+
+
 def test_dub_run_nonexistent_exits_2(runner):
     result = runner.invoke(main, ["run", "/nonexistent.mp4"])
     assert result.exit_code == 2
@@ -244,6 +263,82 @@ def test_dub_run_persists_translate_mode_and_translated_srt(runner, tmp_path, mo
     state = load_state(project_dir)
     assert state.input["translate_mode"] == "use-existing"
     assert state.input["translated_srt"] == str(translated)
+
+
+def test_dub_en2zh_alias_sets_languages_and_completes(runner, tmp_path, monkeypatch):
+    video = tmp_path / "video.mp4"
+    video.write_bytes(b"fake")
+    project_dir = tmp_path / "proj"
+    cfg = tmp_path / "cfg.yaml"
+    cfg.write_text(
+        "paths:\n"
+        "  qwenasr_cli: /bin/true\n"
+        "  omnivoice_python: /bin/true\n"
+        "  skills_dir: /tmp/vendor/pipeline_scripts\n"
+        "  translation_skill: /bin/true\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr("dub.cli.project_input_info", lambda _: {
+        "video_path": str(project_dir / "01_raw_video" / "video.mp4"),
+        "video_sha256": "abc",
+        "duration_sec": 1.23,
+    })
+    monkeypatch.setattr("dub.cli.run_pipeline", lambda *args, **kwargs: {"ok": True})
+
+    result = runner.invoke(
+        main,
+        [
+            "en2zh", str(video),
+            "--project-dir", str(project_dir),
+            "--config", str(cfg),
+            "--yes",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "preflight: src=en tgt=zh" in result.output
+    state = load_state(project_dir)
+    assert state.input["source_lang"] == "en"
+    assert state.input["target_lang"] == "zh"
+
+
+def test_dub_ja2zh_alias_sets_languages_and_completes(runner, tmp_path, monkeypatch):
+    video = tmp_path / "video.mp4"
+    video.write_bytes(b"fake")
+    project_dir = tmp_path / "proj"
+    cfg = tmp_path / "cfg.yaml"
+    cfg.write_text(
+        "paths:\n"
+        "  qwenasr_cli: /bin/true\n"
+        "  omnivoice_python: /bin/true\n"
+        "  skills_dir: /tmp/vendor/pipeline_scripts\n"
+        "  translation_skill: /bin/true\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr("dub.cli.project_input_info", lambda _: {
+        "video_path": str(project_dir / "01_raw_video" / "video.mp4"),
+        "video_sha256": "abc",
+        "duration_sec": 1.23,
+    })
+    monkeypatch.setattr("dub.cli.run_pipeline", lambda *args, **kwargs: {"ok": True})
+
+    result = runner.invoke(
+        main,
+        [
+            "ja2zh", str(video),
+            "--project-dir", str(project_dir),
+            "--config", str(cfg),
+            "--yes",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "preflight: src=ja tgt=zh" in result.output
+    state = load_state(project_dir)
+    assert state.input["source_lang"] == "ja"
+    assert state.input["target_lang"] == "zh"
 
 
 def test_dub_resume_restores_source_lang_from_state(runner, tmp_path, monkeypatch):
