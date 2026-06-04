@@ -10,7 +10,7 @@ uv run dub doctor
 uv run dub auto talk.mp4           # ← canonical one-command entrypoint
 ```
 
-`dub auto` 會自動選擇英文→中文或日文→中文路徑，全程無需指定 `--source-lang` 或 `--target-lang`。
+`dub auto` 會依 `--source-lang` 或 `defaults.source_lang` 選擇英文→中文或日文→中文路徑；它不是自動語言辨識。
 `dub en2zh` / `dub ja2zh` 是明確的語言專用別名，內部與 `dub auto` 共用同一套 staged pipeline 合約。
 `dub run` 保留作為需要明確控制的進階 escape hatch。
 
@@ -93,9 +93,11 @@ uv run dub doctor
 ###  canonical 一鍵流程（推薦起點）
 
 ```bash
-uv run dub auto talk.mp4           # 由 CLI 自動推斷語言路由
-uv run dub auto talk.mp4 --source-lang en   # 明確指定英文→中文
+uv run dub auto talk.mp4 --source-lang en    # 明確指定英文→中文
 uv run dub auto anime.mp4 --source-lang ja   # 明確指定日文→中文
+
+# 若 ~/.config/dub/config.yaml 已設定 defaults.source_lang，也可省略 --source-lang
+uv run dub auto talk.mp4
 ```
 
 ### 語言專用別名
@@ -179,6 +181,28 @@ doctor lanes: ready=`dub ja2zh` ; blocked=`dub en2zh`
 
 完成時會印出最終影片的完整路徑。
 
+### smoke 已驗證的最短命令
+
+以下命令已於 2026-06-04 用真實 backend 驗證通過：
+
+```bash
+uv run dub doctor --config ~/.config/dub/config.yaml
+
+uv run dub auto tests/fixtures/test_short.mp4 \
+  --source-lang en \
+  --project-dir ~/.hermes/dub-cli-test/smoke-20260604-t10-qa \
+  --config ~/.config/dub/config.yaml \
+  --yes
+```
+
+建議 smoke 完成後立刻驗證：
+
+```bash
+uv run dub validate --project-dir ~/.hermes/dub-cli-test/smoke-20260604-t10-qa
+ffprobe -v error -show_entries format=duration,size -show_streams -of json \
+  ~/.hermes/dub-cli-test/smoke-20260604-t10-qa/07_final/video_dubbed.mp4
+```
+
 ---
 
 ## 設定檔原則
@@ -231,15 +255,15 @@ uv run dub doctor --config ~/.config/dub/config.yaml
 以下為 T9/T10 smoke QA 發現的 runtime 事實，文件必須與之一致：
 
 1. **`dub doctor` 與實際 OmniVoice runtime 必須口徑一致。**
-   `dub doctor` 顯示 `omnivoice: READY` 不代表 OmniVoice 實際可以跑——`paths.omnivoice_python` 指向的 interpreter 必須有完整的 stage-05 依賴（torch、omnivoice、opencc）。
-   若 `dub doctor` 顯示 READY 但 OmniVoice 實際失敗，重跑 `dub bootstrap-omnivoice --config ~/.config/dub/config.yaml` 並確認 `paths.omnivoice_python` 指向正確的 venv。
+   `dub doctor` 只有在 `paths.omnivoice_python` 指向的 interpreter 能通過 `torch`、`omnivoice`、`opencc` import gate 時，才應顯示 `omnivoice: READY`。
+   若 OmniVoice 路線異常，重跑 `dub bootstrap-omnivoice --config ~/.config/dub/config.yaml`，讓 bootstrap 重新安裝並驗證 runtime imports。
 
 2. **OmniVoice 專用 interpreter 依賴真實 stage-05 deps。**
    OmniVoice 的 wrapper script（如 `tts_omnivoice.sh`）需要 `torch`、`omnivoice`、`opencc`，這些不由標準 dub venv 提供，而由 `dub bootstrap-omnivoice` 所建立的獨立 venv 提供。
 
 3. **每個專案目錄是隔離的，產物驗證是 operator 責任。**
-   每次 `dub auto` / `en2zh` / `ja2zh` 在新目錄執行；`--project-dir` 用於控制位置。
-   完成後用 `dub validate --project-dir <dir>` 驗證產物：`07_final/video_dubbed_stem.mp4` 存在且 `state.json` 顯示全部 6 個 stage 完成。
+   每次 `dub auto` / `en2zh` / `ja2zh` 都應在獨立 project-dir 下執行；`--project-dir` 用於控制位置。
+   完成後至少驗證：`state.json` 六個 stage 全部 `done`、`06_tts_wav/` 有產物、`07_final/video_dubbed.mp4` 與 `07_final/video_dubbed_stem.mp4` 存在，必要時再用 `ffprobe` 確認最終 MP4。
 
 ---
 

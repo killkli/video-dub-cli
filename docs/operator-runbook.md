@@ -28,6 +28,8 @@ uv run dub bootstrap
 uv run dub bootstrap-omnivoice --config ~/.config/dub/config.yaml
 ```
 
+這一步現在會直接驗證 OmniVoice 專用 interpreter 是否真的能 import `torch`、`omnivoice`、`opencc`；若 import probe 沒過，不要直接進 smoke。
+
 ---
 
 ## 1. 如何看專案狀態
@@ -42,6 +44,7 @@ uv run dub bootstrap-omnivoice --config ~/.config/dub/config.yaml
 ```bash
 uv run dub status --project-dir /path/to/project
 uv run dub validate --project-dir /path/to/project
+ffprobe -v error -show_entries format=duration,size -show_streams -of json /path/to/project/07_final/video_dubbed.mp4
 ```
 
 ### 若要直接看 state
@@ -55,6 +58,15 @@ python3 -m json.tool /path/to/project/.dub/state.json
 ```bash
 tail -30 /path/to/project/.dub/05_tts.log
 ```
+
+### smoke 驗證時建議檢查
+
+至少確認：
+
+- `state.json` 六個 stage 都是 `done`
+- `06_tts_wav/` 有音檔產物
+- `07_final/video_dubbed.mp4` 存在
+- `07_final/video_dubbed_stem.mp4` 存在
 
 ---
 
@@ -81,9 +93,9 @@ uv run dub resume --project-dir /path/to/project
 
 ```bash
 uv run dub clean --project-dir /path/to/project
-uv run dub auto talk.mp4           # 重建新專案
+uv run dub auto talk.mp4 --source-lang en    # 重建新專案
 # 或
-uv run dub en2zh talk.mp4          # 重建新專案
+uv run dub en2zh talk.mp4                    # 重建新專案
 ```
 
 ---
@@ -154,8 +166,8 @@ uv run dub auto talk.mp4 \
 若沒有，直接走預設翻譯：
 
 ```bash
-uv run dub auto talk.mp4          # 英文影片
-uv run dub auto anime.mp4 --source-lang ja   # 日文影片
+uv run dub auto talk.mp4 --source-lang en
+uv run dub auto anime.mp4 --source-lang ja
 ```
 
 ---
@@ -176,6 +188,15 @@ uv run dub resume --project-dir /path/to/project
 ```
 
 若仍失敗，再看 `.dub/05_tts.log` 判斷是哪條 backend 出問題。
+
+若是 OmniVoice 路線，先補做：
+
+```bash
+uv run dub bootstrap-omnivoice --config ~/.config/dub/config.yaml
+uv run dub doctor --config ~/.config/dub/config.yaml
+```
+
+確認 doctor 內 `tts_backends.omnivoice` 的 `deps:torch`、`deps:omnivoice`、`deps:opencc` 都是 `ok`。
 
 ---
 
@@ -198,6 +219,34 @@ uv run dub resume --project-dir /path/to/project
 ---
 
 ## 4. 與目前 standalone 契約直接相關的錯誤
+
+### FR-0：把 `dub auto` 誤解成自動語言辨識
+
+**症狀**
+
+- 沒給 `--source-lang`
+- `defaults.source_lang` 也沒設成你要的語言
+- 結果走錯英/日路線
+
+**原因**
+
+`dub auto` 是「一鍵 workflow 入口」，不是自動語言辨識。它只會依 `--source-lang` 或 `defaults.source_lang` 選路。
+
+**處理方式**
+
+```bash
+uv run dub auto talk.mp4 --source-lang en
+uv run dub auto anime.mp4 --source-lang ja
+```
+
+或在 `~/.config/dub/config.yaml` 設定：
+
+```yaml
+defaults:
+  source_lang: en
+```
+
+---
 
 ### FR-6：`repo_pipeline_scripts: MISSING`
 
@@ -270,7 +319,7 @@ uv run dub bootstrap-omnivoice --config ~/.config/dub/config.yaml
 uv run dub doctor --config ~/.config/dub/config.yaml
 ```
 
-目標是讓 `tts_backends.omnivoice` 顯示 `READY`。
+目標是讓 `tts_backends.omnivoice` 顯示 `READY`，且 `deps:torch`、`deps:omnivoice`、`deps:opencc` 都通過。
 
 ---
 
@@ -318,6 +367,7 @@ uv run dub bootstrap-voxcpm
 - OmniVoice heavy deps 不跟標準 dub venv 混裝
 - 用 `dub bootstrap-omnivoice` 建立獨立 venv
 - `paths.omnivoice_python` 指向該 venv 的 Python
+- bootstrap 完成後會立即做 runtime import probe
 
 ---
 
@@ -339,6 +389,7 @@ uv run dub bootstrap
 
 ```bash
 uv run dub bootstrap-omnivoice --config ~/.config/dub/config.yaml
+uv run dub doctor --config ~/.config/dub/config.yaml
 ```
 
 ### 第四步：看專案狀態
@@ -346,6 +397,7 @@ uv run dub bootstrap-omnivoice --config ~/.config/dub/config.yaml
 ```bash
 uv run dub status --project-dir /path/to/project
 uv run dub validate --project-dir /path/to/project
+ffprobe -v error -show_entries format=duration,size -show_streams -of json /path/to/project/07_final/video_dubbed.mp4
 ```
 
 ### 第五步：看 `.dub/*.log`
@@ -387,4 +439,5 @@ uv run dub clean --project-dir <DIR>
 ## 8. 與舊版文件的差異說明
 
 本版 runbook 以 `dub auto` 為主要操作起點，並將 `dub run` 定位為進階 escape hatch。
+但 `dub auto` 仍需要 `--source-lang` 或 `defaults.source_lang` 來決定英/日路線；它不是自動語言辨識。
 舊版曾以 `dub run ... --source-lang en --target-lang zh` 為主要範例；該用法現在仍支援，但已非推薦路徑。

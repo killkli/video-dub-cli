@@ -85,17 +85,17 @@ next:    uv run dub auto <video>
 
 ### `dub auto`（推薦起點）
 
-`dub auto` 會根據設定或 `--source-lang` 自動選擇英文→中文或日文→中文路徑，全程無需指定 `--source-lang` 或 `--target-lang`：
+`dub auto` 會根據 `--source-lang` 或 `defaults.source_lang` 選擇英文→中文或日文→中文路徑；它不是自動語言辨識：
 
 ```bash
-# 英文影片 → 中文（自動推斷）
-uv run dub auto talk.mp4
+# 英文影片 → 中文（明確指定）
+uv run dub auto talk.mp4 --source-lang en
 
 # 日文影片 → 中文（明確指定）
 uv run dub auto anime.mp4 --source-lang ja
 
-# 明確指定英文→中文
-uv run dub auto talk.mp4 --source-lang en
+# 若 ~/.config/dub/config.yaml 已設定 defaults.source_lang，也可省略 --source-lang
+uv run dub auto talk.mp4
 ```
 
 ### 語言專用別名
@@ -133,6 +133,16 @@ uv run dub run talk.mp4 --source-lang en --target-lang zh --config ~/.config/dub
 
 ```text
 <project>/07_final/video_dubbed_stem.mp4
+```
+
+若要做可重現 smoke，建議顯式指定隔離 `--project-dir`：
+
+```bash
+uv run dub auto tests/fixtures/test_short.mp4 \
+  --source-lang en \
+  --project-dir ~/.hermes/dub-cli-test/smoke-20260604-t10-qa \
+  --config ~/.config/dub/config.yaml \
+  --yes
 ```
 
 ---
@@ -179,6 +189,8 @@ uv run dub doctor --config ~/.config/dub/config.yaml
 
 目標是看到 `tts_backends.omnivoice: READY`。
 
+`bootstrap-omnivoice` 現在不只會建立 venv，還會立刻驗證該 venv 能 import `torch`、`omnivoice`、`opencc`；這三個 import 不通，就不應直接進 smoke。
+
 ---
 
 ## 進階：自訂設定檔
@@ -197,6 +209,13 @@ cp examples/config_en2zh.yaml ~/.config/dub/config.yaml
 ```bash
 uv run dub doctor
 uv run dub bootstrap
+```
+
+若是 OmniVoice 路線異常，優先補跑：
+
+```bash
+uv run dub bootstrap-omnivoice --config ~/.config/dub/config.yaml
+uv run dub doctor --config ~/.config/dub/config.yaml
 ```
 
 完整故障排除請看 `docs/operator-runbook.md`。
