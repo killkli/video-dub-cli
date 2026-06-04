@@ -85,17 +85,12 @@ next:    uv run dub auto <video>
 
 ### `dub auto`（推薦起點）
 
-`dub auto` 會根據 `--source-lang` 或 `defaults.source_lang` 選擇英文→中文或日文→中文路徑；它不是自動語言辨識：
+`dub auto` 執行 30 秒音訊探針，自動判斷來源語言（英文或日文），再選擇對應路線。明確的 `--source-lang` 永遠優先。
 
 ```bash
-# 英文影片 → 中文（明確指定）
-uv run dub auto talk.mp4 --source-lang en
-
-# 日文影片 → 中文（明確指定）
-uv run dub auto anime.mp4 --source-lang ja
-
-# 若 ~/.config/dub/config.yaml 已設定 defaults.source_lang，也可省略 --source-lang
-uv run dub auto talk.mp4
+uv run dub auto talk.mp4           # 自動偵測（30 秒探針後選路）
+uv run dub auto talk.mp4 --source-lang en    # 明確指定英文→中文
+uv run dub auto anime.mp4 --source-lang ja    # 明確指定日文→中文
 ```
 
 ### 語言專用別名

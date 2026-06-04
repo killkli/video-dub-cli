@@ -220,30 +220,29 @@ uv run dub resume --project-dir /path/to/project
 
 ## 4. 與目前 standalone 契約直接相關的錯誤
 
-### FR-0：把 `dub auto` 誤解成自動語言辨識
+### FR-0：`dub auto` 自動偵測失敗，請加 `--source-lang`
 
 **症狀**
 
-- 沒給 `--source-lang`
-- `defaults.source_lang` 也沒設成你要的語言
-- 結果走錯英/日路線
+- 自動偵測失敗（無音軌、混合文字、ASR 不可用等）
+- 錯誤訊息請 operator 重跑並加 `--source-lang en|ja`
 
 **原因**
 
-`dub auto` 是「一鍵 workflow 入口」，不是自動語言辨識。它只會依 `--source-lang` 或 `defaults.source_lang` 選路。
+`dub auto` 現在支援自動偵測，但會在無法明確判斷時快速失敗，不會靜默猜測。
 
 **處理方式**
 
 ```bash
-uv run dub auto talk.mp4 --source-lang en
-uv run dub auto anime.mp4 --source-lang ja
+uv run dub auto talk.mp4 --source-lang en    # 明確指定英文
+uv run dub auto anime.mp4 --source-lang ja   # 明確指定日文
 ```
 
-或在 `~/.config/dub/config.yaml` 設定：
+或使用語言專用別名，完全繞過偵測：
 
-```yaml
-defaults:
-  source_lang: en
+```bash
+uv run dub en2zh talk.mp4    # 英文→中文，不經自動偵測
+uv run dub ja2zh anime.mp4   # 日文→中文，不經自動偵測
 ```
 
 ---
@@ -423,9 +422,11 @@ uv run dub auto --help
 uv run dub doctor
 uv run dub bootstrap
 uv run dub bootstrap-omnivoice
-uv run dub auto <VIDEO>              # canonical one-command entrypoint
-uv run dub en2zh <VIDEO>             # explicit English→Chinese alias
-uv run dub ja2zh <VIDEO>             # explicit Japanese→Chinese alias
+uv run dub auto <VIDEO>              # 自動偵測英文或日文，30 秒探針後選路
+uv run dub auto <VIDEO> --source-lang en    # 明確指定英文→中文
+uv run dub auto <VIDEO> --source-lang ja    # 明確指定日文→中文
+uv run dub en2zh <VIDEO>             # 明確英文→中文，繞過自動偵測
+uv run dub ja2zh <VIDEO>             # 明確日文→中文，繞過自動偵測
 uv run dub resume --project-dir <DIR>
 uv run dub status --project-dir <DIR>
 uv run dub validate --project-dir <DIR>
@@ -434,10 +435,16 @@ uv run dub clean --project-dir <DIR>
 
 若文件內容與這些命令的真實輸出不同，應以命令實際輸出為準。
 
+`dub auto` 的偵測邏輯（Wave-3 合約）：
+
+1. 明確 `--source-lang en|ja` → 永遠贏過自動偵測，印出 `route_basis=override:explicit-flag`
+2. 無 flag → 執行 30 秒音訊探針（MLX ASR），以字元集分類英文/日文，印出 `route_basis=detected:<lang>-asr-head`
+3. 偵測失敗（無音軌、混合文字、ASR 不可用）→ 快速失敗，印出重新執行並加 `--source-lang` 的指引
+
 ---
 
 ## 8. 與舊版文件的差異說明
 
 本版 runbook 以 `dub auto` 為主要操作起點，並將 `dub run` 定位為進階 escape hatch。
-但 `dub auto` 仍需要 `--source-lang` 或 `defaults.source_lang` 來決定英/日路線；它不是自動語言辨識。
-舊版曾以 `dub run ... --source-lang en --target-lang zh` 為主要範例；該用法現在仍支援，但已非推薦路徑。
+
+`dub auto` 現在預設執行自動偵測（30 秒音訊探針，MLX ASR + 字元集分類），而不是依賴 `--source-lang` 或 `defaults.source_lang`。明確的 `--source-lang en|ja` 仍是可用的 override。語言專用別名 `en2zh` / `ja2zh` 完全繞過偵測，直接指定路線。

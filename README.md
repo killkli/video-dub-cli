@@ -10,7 +10,7 @@ uv run dub doctor
 uv run dub auto talk.mp4           # ← canonical one-command entrypoint
 ```
 
-`dub auto` 會依 `--source-lang` 或 `defaults.source_lang` 選擇英文→中文或日文→中文路徑；它不是自動語言辨識。
+`dub auto` 預設執行 30 秒音訊探針，自動判斷來源語言（英文或日文）再選擇對應路線；明確的 `--source-lang en|ja` 永遠優先，會印出 `route_basis=override:explicit-flag` 供審計。
 `dub en2zh` / `dub ja2zh` 是明確的語言專用別名，內部與 `dub auto` 共用同一套 staged pipeline 合約。
 `dub run` 保留作為需要明確控制的進階 escape hatch。
 
@@ -93,11 +93,9 @@ uv run dub doctor
 ###  canonical 一鍵流程（推薦起點）
 
 ```bash
-uv run dub auto talk.mp4 --source-lang en    # 明確指定英文→中文
-uv run dub auto anime.mp4 --source-lang ja   # 明確指定日文→中文
-
-# 若 ~/.config/dub/config.yaml 已設定 defaults.source_lang，也可省略 --source-lang
-uv run dub auto talk.mp4
+uv run dub auto talk.mp4           # 自動偵測英文或日文，30 秒探針後選路
+uv run dub auto talk.mp4 --source-lang en   # 明確指定英文→中文（override 自動偵測）
+uv run dub auto anime.mp4 --source-lang ja    # 明確指定日文→中文（override 自動偵測）
 ```
 
 ### 語言專用別名
