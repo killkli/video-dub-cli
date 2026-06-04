@@ -101,7 +101,14 @@ def _validate_run_contract(project_dir: Path, cfg) -> None:
         )
 
 
-def _preflight_route_summary(project_dir: Path, cfg) -> str:
+def _preflight_route_summary_payload(project_dir: Path, cfg) -> str:
+    """Return the ``mode=... route=...`` half of the legacy preflight summary.
+
+    This is shared between :func:`_preflight_route_summary` (which
+    keeps the full preflight line shape for backward compatibility
+    with existing tests) and :func:`_run_preflight` (which now bundles
+    the per-gate status into one line).
+    """
     mode = cfg.translation.mode
     translated_srt = cfg.translation.translated_srt
     project_translated_srt = project_dir / "05_translated_srt" / "video.zhtw.srt"
@@ -113,13 +120,139 @@ def _preflight_route_summary(project_dir: Path, cfg) -> str:
     else:
         route = f"translate=skip existing_project_srt={project_translated_srt}"
 
+    return f"mode={mode} route={route}"
+
+
+def _preflight_route_summary(project_dir: Path, cfg) -> str:
     return (
         "preflight: "
         f"src={cfg.defaults.source_lang} "
         f"tgt={cfg.defaults.target_lang} "
         f"project={project_dir} "
-        f"mode={mode} "
-        f"route={route}"
+        f"{_preflight_route_summary_payload(project_dir, cfg)}"
+    )
+
+
+# Route → TTS backend mapping. This is the canonical dispatch table for
+# the one-command workflow: dub auto / dub en2zh / dub ja2zh all funnel
+# through the same preflight contract, and the source-lang determines
+# which TTS backend gate must be READY before stage execution starts.
+#
+# Keeping this in one place prevents drift: adding a new auto-route
+# means appending to this mapping and to ``_resolve_auto_source_lang``.
+_SUPPORTED_AUTO_SOURCE_LANGS: tuple[str, ...] = ("en", "ja")
+_TTS_BACKEND_FOR_SOURCE: dict[str, str] = {
+    "en": "omnivoice",
+    "ja": "voxcpme",
+}
+
+
+def _tts_backend_for_source(source_lang: str) -> str:
+    """Return the TTS backend name that owns ``source_lang``.
+
+    Raises :class:`UserError` for source languages outside the
+    productized auto-workflow surface. The route-specific commands
+    (``dub en2zh`` / ``dub ja2zh``) hard-code their own source lang,
+    so this helper is only exercised by the centralized preflight
+    contract and ``dub auto`` callers.
+    """
+    backend = _TTS_BACKEND_FOR_SOURCE.get(source_lang)
+    if backend is None:
+        raise UserError(
+            f"no TTS route registered for source_lang={source_lang!r}; "
+            f"supported: {','.join(_SUPPORTED_AUTO_SOURCE_LANGS)}"
+        )
+    return backend
+
+
+def _format_preflight_gate(name: str, ok: bool, detail: str) -> str:
+    status = "ok" if ok else "fail"
+    return f"{name}={status}({detail})"
+
+
+def _run_preflight(project_dir: Path, cfg, source_lang: str) -> str:
+    """Run the centralized route-specific preflight checks.
+
+    This is the single contract shared by ``dub auto``, ``dub en2zh``,
+    and ``dub ja2zh`` — every gate that the auto-workflow needs is
+    verified here before any stage is executed. On success it returns
+    a one-line summary that the caller echoes; on failure it raises
+    :class:`UserError` listing *every* failing gate so the operator
+    can fix all blockers in one pass instead of being drip-fed.
+
+    Current gates:
+
+    * ``ffmpeg`` / ``ffprobe`` — must be on ``$PATH``; everything from
+      stem extraction to final mux needs them, and a missing
+      ffmpeg is the single most common operator footgun.
+    * ``pipeline_scripts`` — the repo-owned vendored runtime scripts
+      must be on disk.
+    * ``gemini_key`` — required when ``translate-mode=delegate``; we
+      honor the configured ``api_env_var`` and the documented fall-back
+      names so the operator does not have to know which one we look at.
+    * ``tts.<backend>`` — the TTS backend that owns the resolved
+      route must be ``READY`` per :class:`TtsReadiness`. We do **not**
+      re-probe every backend: only the one the route actually drives.
+
+    New auto-workflow surfaces (e.g. a new source language) should
+    extend ``_TTS_BACKEND_FOR_SOURCE``; the gate logic itself does
+    not need to change.
+    """
+    # Best-effort: pull secrets from the operator's interactive rc
+    # before we check the gemini gate. We mirror what `dub doctor`
+    # does so a one-command `dub auto` works in Hermes / CI shells
+    # that do not source ~/.zshrc on their own.
+    _auto_recover_missing_secrets()
+
+    gates: list[tuple[str, bool, str]] = []
+
+    ffmpeg_ok, ffmpeg_detail = _which_status("ffmpeg")
+    gates.append(("ffmpeg", ffmpeg_ok, ffmpeg_detail))
+    ffprobe_ok, ffprobe_detail = _which_status("ffprobe")
+    gates.append(("ffprobe", ffprobe_ok, ffprobe_detail))
+
+    scripts_dir = pipeline_scripts_dir()
+    scripts_ok, scripts_detail = _path_status(scripts_dir)
+    gates.append(("pipeline_scripts", scripts_ok, scripts_detail))
+
+    mode = cfg.translation.mode
+    if mode == "delegate":
+        gemini_ok, gemini_detail = _env_status(
+            cfg.translation.api_env_var,
+            "GOOGLE_API_KEY",
+            "GEMINI_API_KEY",
+        )
+        gates.append(("gemini_key", gemini_ok, gemini_detail))
+
+    backend_name = _tts_backend_for_source(source_lang)
+    if backend_name == "omnivoice":
+        tts_readiness = omnivoice_readiness(cfg)
+    elif backend_name == "voxcpme":
+        tts_readiness = voxcpme_readiness(cfg)
+    else:  # pragma: no cover - guarded by _tts_backend_for_source
+        tts_readiness = None
+    if tts_readiness is not None:
+        gates.append((f"tts.{backend_name}", tts_readiness.ready, tts_readiness.detail))
+
+    failed = [(name, detail) for name, ok, detail in gates if not ok]
+    if failed:
+        bullets = "\n".join(
+            f"  - {name}: {detail}" for name, detail in failed
+        )
+        raise UserError(
+            f"preflight failed for source_lang={source_lang} "
+            f"project={project_dir} — fix the following gate(s) "
+            f"and re-run, or run `dub doctor` for the full readiness report:\n"
+            f"{bullets}"
+        )
+
+    route_summary = _preflight_route_summary_payload(project_dir, cfg)
+    parts = " ".join(
+        _format_preflight_gate(name, ok, detail) for name, ok, detail in gates
+    )
+    return (
+        f"preflight: src={source_lang} tgt={cfg.defaults.target_lang} "
+        f"project={project_dir} {route_summary} {parts}"
     )
 
 
@@ -280,7 +413,7 @@ def _run_pipeline_command(
         )
         pdir = _prepare_project(video, str(project_dir) if project_dir else None, cfg)
         _validate_run_contract(pdir, cfg)
-        click.echo(_preflight_route_summary(pdir, cfg))
+        click.echo(_run_preflight(pdir, cfg, cfg.defaults.source_lang))
         _bootstrap_state(pdir, cfg)
         _refresh_runtime_input_state(pdir, cfg)
         run_pipeline(pdir, cfg, yes=yes)
