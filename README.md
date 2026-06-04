@@ -1,45 +1,42 @@
 # video-dub-cli
 
 > 可續跑的影片翻譯／中文配音 CLI 管線。
-> 目前正式支援的標準路徑：**單一 repo + `uv sync --extra all`**，提供 CLI、本地 ASR、Gemini 翻譯與 VoxCPM 路線。
+> 正式支援：**單一 repo + `uv sync --extra all`**，提供 CLI、本地 ASR、Gemini 翻譯與 VoxCPM 路線。
 > OmniVoice 已改為 **repo 內建程式碼 + 獨立 Python 環境** 的可選路線，請用 `dub bootstrap-omnivoice` 建立。
 
 ```bash
 uv sync --extra all
 uv run dub doctor
-uv run dub en2zh talk.mp4
+uv run dub auto talk.mp4           # ← canonical one-command entrypoint
 ```
 
-`video-dub-cli` 把多階段影片配音流程收斂成單一 CLI，具備：
-
-- 專案狀態持久化
-- 中斷後續跑
-- 各 stage 產物落盤
-- 明確的環境檢查、驗證、清理與續跑操作面
+`dub auto` 會自動選擇英文→中文或日文→中文路徑，全程無需指定 `--source-lang` 或 `--target-lang`。
+`dub en2zh` / `dub ja2zh` 是明確的語言專用別名，內部與 `dub auto` 共用同一套 staged pipeline 合約。
+`dub run` 保留作為需要明確控制的進階 escape hatch。
 
 ---
 
-## 目前這個 repo 真的包含了什麼
+## 已內建
 
-### 已內建
 - CLI 與設定載入
 - 專案狀態管理與重跑控制
 - 管線腳本（`vendor/pipeline_scripts/`）
 - Gemini 翻譯邏輯
-- 內建 ASR 路線（`src/qwenasr_mlx_cli/`）
+- 內建 ASR（`src/qwenasr_mlx_cli/`）
 - OmniVoice 轉接層與內嵌模型程式碼（`src/omnivoice/`）
 - VoxCPM 轉接層
 
-### 仍屬外部前置條件
+## 外部前置條件
+
 - `ffmpeg` / `ffprobe`
 - Gemini API key
-- VoxCPM 路線：`uv sync --extra all` 可直接提供標準 `ja2zh` operator 路線；若要獨立 VoxCPM interpreter，可跑 `dub bootstrap-voxcpm`
-- 若 `dub doctor` 顯示 `service` 缺失，仍需啟動本機 VoxCPM 服務（預設 `127.0.0.1:8808`）
-- OmniVoice 專用 Python 環境（若要走 OmniVoice；可由 `dub bootstrap-omnivoice` 自動建立）
+- VoxCPM 路線：標準 `uv sync --extra all` 即可支援 `ja2zh`；若要獨立 VoxCPM interpreter，跑 `dub bootstrap-voxcpm`
+- 若 `dub doctor` 顯示 `service` 缺失，仍需啟動本機 VoxCPM 服務（`127.0.0.1:8808`）
+- OmniVoice（若要使用；由 `dub bootstrap-omnivoice` 自動建立專用環境）
 
 ---
 
-## 正式支援的安裝契約
+## 安裝契約
 
 ### 1. clone repo
 
@@ -54,12 +51,7 @@ cd video-dub-cli
 uv sync --extra all
 ```
 
-這個命令會建立 `.venv/`，並安裝：
-
-- `dub` CLI
-- 本地 ASR 依賴
-- Gemini 翻譯依賴
-- 標準 VoxCPM route 依賴（`gradio_client` / `opencc`）
+這會建立 `.venv/`，並安裝 `dub` CLI、本地 ASR 依賴、Gemini 翻譯依賴與標準 VoxCPM route 依賴。
 
 ### 3. 安裝系統工具
 
@@ -74,7 +66,7 @@ sudo apt-get install -y ffmpeg
 ### 4. 設定 Gemini API key
 
 ```bash
-export GOOGLE_API_KEY=your_google_api_key
+export GOOGLE_API_KEY=your_g..._key
 ```
 
 或：
@@ -85,174 +77,137 @@ cp .env.example .env
 set -a; source .env; set +a
 ```
 
-### 5. 驗證標準環境
+### 5. 驗證環境
 
 ```bash
 uv run dub --help
 uv run dub doctor
 ```
 
----
-
-## OmniVoice 的正式做法
-
-OmniVoice **不再使用 `DUB_OMNIVOICE_ROOT`**。
-
-目前正式做法是：
-
-```bash
-uv run dub bootstrap-omnivoice
-```
-
-這個命令會自動：
-
-1. 建立 OmniVoice 專用 venv
-2. 安裝 `video-dub-cli[tts-omnivoice]`
-3. 把 `paths.omnivoice_python` 寫入設定檔
-
-若你的設定檔不在預設位置：
-
-```bash
-uv run dub bootstrap-omnivoice --config /path/to/config.yaml
-```
-
-完成後可再驗證：
-
-```bash
-uv run dub doctor --config /path/to/config.yaml
-```
-
-當 `tts_backends.omnivoice` 顯示 `READY`，代表 OmniVoice 路線已可用。
+`dub doctor` 會報告 `ready for dub auto` 或列出缺少的項目。
 
 ---
 
 ## 主要命令
 
-### 一鍵流程
+###  canonical 一鍵流程（推薦起點）
 
 ```bash
-uv run dub en2zh talk.mp4
-uv run dub ja2zh anime.mp4
+uv run dub auto talk.mp4           # 由 CLI 自動推斷語言路由
+uv run dub auto talk.mp4 --source-lang en   # 明確指定英文→中文
+uv run dub auto anime.mp4 --source-lang ja   # 明確指定日文→中文
 ```
 
-### 進階入口
+### 語言專用別名
 
 ```bash
-uv run dub run talk.mp4 --source-lang en --target-lang zh
+uv run dub en2zh talk.mp4          # 英文→中文，明確別名
+uv run dub ja2zh anime.mp4         # 日文→中文，明確別名
 ```
 
 ### 使用既有翻譯字幕
 
 ```bash
-uv run dub run talk.mp4 \
-  --source-lang en \
-  --target-lang zh \
+uv run dub auto talk.mp4 \
   --translate-mode use-existing \
   --translated-srt talk.zhtw.srt
 ```
 
-### 續跑
+### 進階入口（escape hatch）
+
+```bash
+uv run dub run talk.mp4 --source-lang en --target-lang zh
+```
+
+`dub run` 保留用於需要明確覆寫 pipeline 參數的進階情境，常見 operator 情境應使用 `dub auto` 或 `en2zh`/`ja2zh` 別名。
+
+### 續跑、狀態、驗證
 
 ```bash
 uv run dub resume --project-dir /path/to/project
-```
-
-### 查看狀態
-
-```bash
 uv run dub status --project-dir /path/to/project
-```
-
-### 驗證產物
-
-```bash
 uv run dub validate --project-dir /path/to/project
-```
-
-### 清理後重跑
-
-```bash
 uv run dub clean --project-dir /path/to/project
-uv run dub resume --project-dir /path/to/project
 ```
 
 ---
 
 ## `dub doctor` 會檢查什麼
 
-目前 `dub doctor` 會直接檢查：
+目前檢查：
 
-- `ffmpeg`
-- `ffprobe`
+- `ffmpeg` / `ffprobe`
 - `repo_pipeline_scripts`
 - `gemini_api_key`
-- `py:qwen3_asr_mlx`
-- `py:soundfile`
-- `py:pydub`
-- `py:silero_vad`
-- `py:google_genai`
-- `py:torchcodec`
-- `tts_backends.omnivoice`
-- `tts_backends.voxcpme`
+- Python 依賴：`qwen3_asr_mlx`, `soundfile`, `pydub`, `silero_vad`, `google_genai`, `torchcodec`
+- `tts_backends.omnivoice`（wrapper / interpreter / deps / service 各 gate）
+- `tts_backends.voxcpme`（wrapper / interpreter / deps / service 各 gate）
 
-另外它也會：
+`dub doctor` 成功時顯示：
 
-- 在 Hermes / CI shell 下，嘗試從 `~/.zshrc` / `~/.bashrc` 自動復原 `GOOGLE_API_KEY` / `GEMINI_API_KEY`
-- 逐項列出 OmniVoice / VoxCPM 的 gate（wrapper / interpreter / deps / service）
+```
+doctor ok: ready for `dub auto`, `dub en2zh`, `dub ja2zh`
+next:    uv run dub auto <video>
+```
 
-注意：
-
-- `doctor ok` 代表**標準 operator 路線可跑**
-- 即使 OmniVoice 顯示 `BLOCKED`，只要標準 `en2zh` / `ja2zh` 路線可跑，整體 doctor 仍可能通過
-- 若要讓 OmniVoice 變成 `READY`，請跑 `dub bootstrap-omnivoice`
+失敗時列出缺少的項目與修復建議。
 
 ---
 
 ## 專案輸出結構
 
-每次執行都會把產物存成可續跑的專案結構：
+每次執行將產物存成可續跑的專案結構：
 
-- `01_raw_video/`
-- `02_stems/`
-- `03_asr/`
-- `04_ref_audio/`
-- `05_translate/`
-- `05_translated_srt/`
-- `06_tts_wav/`
-- `07_final/`
-- `.dub/state.json`
-- `.dub/*.log`
-
-最終影片位置通常是：
-
-```text
-<project>/07_final/video_dubbed_stem.mp4
 ```
+<project>/               # 預設：<video-stem>.dub/ 在輸入影片旁邊
+├── 01_raw_video/
+├── 02_stems/
+├── 03_asr/
+├── 04_ref_audio/
+├── 05_translate/
+├── 05_translated_srt/
+├── 06_tts_wav/
+├── 07_final/
+│   └── video_dubbed_stem.mp4   # 最終產物
+└── .dub/
+    ├── state.json
+    └── *.log
+```
+
+完成時會印出最終影片的完整路徑。
 
 ---
 
 ## 設定檔原則
 
-多數 operator 不需要手動改 `paths.*`。
+多數情境**不需要**手動建立或複製設定檔。
 
-常見情況只需要：
-
-- 複製範例設定檔
-- 設定 API key
-- 需要 OmniVoice 時再跑 `dub bootstrap-omnivoice`
-- 需要獨立 VoxCPM interpreter 時可跑 `dub bootstrap-voxcpm`
-
-推薦起點：
+若需自訂：
 
 ```bash
 mkdir -p ~/.config/dub
 cp examples/config_en2zh.yaml ~/.config/dub/config.yaml
 ```
 
-若要建立 OmniVoice 路線：
+常見自訂需求：
+
+- `GOOGLE_API_KEY` 環境變數（必填，已由 doctor 自動復原）
+- OmniVoice：`dub bootstrap-omnivoice --config ~/.config/dub/config.yaml`
+- 獨立 VoxCPM interpreter：`dub bootstrap-voxcpm`
+
+---
+
+## OmniVoice 的正式做法
 
 ```bash
-uv run dub bootstrap-omnivoice --config ~/.config/dub/config.yaml
+uv run dub bootstrap-omnivoice
+```
+
+會自動建立 OmniVoice 專用 venv 並寫入 `paths.omnivoice_python`。
+完成後重新驗證：
+
+```bash
+uv run dub doctor --config ~/.config/dub/config.yaml
 ```
 
 ---
@@ -261,27 +216,28 @@ uv run dub bootstrap-omnivoice --config ~/.config/dub/config.yaml
 
 - `QUICKSTART.md`：5 分鐘上手
 - `docs/operator-runbook.md`：故障排除與恢復流程
-- `docs/operator-qa-real-backend-en2zh-2026-06-03.md`：英文→中文真實驗證紀錄
-- `docs/operator-qa-real-backend-ja2zh-2026-06-03.md`：日文→中文真實驗證紀錄
-- `docs/standalone-dependency-map.md`：依賴地圖
+- `docs/qa-auto-workflow-acceptance-criteria-2026-06-04.md`：auto-workflow 驗收標準（T2 QA 定義）
+- `docs/auto-workflow-contract-2026-06-04.md`：operator 合約（T0 gate）
+- `docs/operator-qa-real-backend-en2zh-2026-06-03.md`：英文→中文真實驗證
+- `docs/operator-qa-real-backend-ja2zh-2026-06-03.md`：日文→中文真實驗證
 
 ---
 
 ## 目前可以誠實宣稱的範圍
 
 ### 已驗證
+
 - `uv sync --extra all`
-- `uv run dub doctor`
-- `uv run dub bootstrap`
-- `uv run dub bootstrap-omnivoice`
-- `uv run dub bootstrap-voxcpm`
-- `uv run dub en2zh ...`
-- `uv run dub ja2zh ...`
+- `uv run dub --help` / `uv run dub auto --help`
+- `uv run dub doctor`（自動從 `~/.zshrc` 復原 Gemini key）
+- `uv run dub bootstrap-omnivoice` / `uv run dub bootstrap-voxcpm`
+- `uv run dub auto ...` / `uv run dub en2zh ...` / `uv run dub ja2zh ...`
 - `dub resume / status / validate / clean`
 
 ### 不應過度宣稱
-- 不是所有 TTS backend 都在同一個 Python 環境內完成安裝
-- OmniVoice 仍採「標準 dub venv + 專用 OmniVoice venv」雙環境契約
-- VoxCPM 仍需要本機服務可用
+
+- 不是所有 TTS backend 都在同一個 Python 環境內
+- OmniVoice 採「標準 dub venv + 專用 OmniVoice venv」雙環境契約
+- VoxCPM 依賴本機服務（`127.0.0.1:8808`）
 
 這是目前已驗證、可維運、可交付的 operator contract。

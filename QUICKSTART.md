@@ -1,12 +1,6 @@
 # Quickstart｜5 分鐘上手 video-dub-cli
 
-這份文件只描述**目前已驗證的正式操作路徑**，並統一使用台灣繁體中文。
-
-目前有兩條路：
-
-1. **標準路線**：`uv sync --extra all` → `dub doctor` → `dub en2zh` / `dub ja2zh`
-2. **OmniVoice 路線**：在標準路線之外，再執行 `dub bootstrap-omnivoice`
-3. **獨立 VoxCPM interpreter 路線**：在標準路線之外，可執行 `dub bootstrap-voxcpm`
+目前已驗證的標準操作路徑，統一使用台灣繁體中文。
 
 ---
 
@@ -20,7 +14,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 ---
 
-## 2. 下載 repo
+## 2. Clone 並進入 repo
 
 ```bash
 git clone https://codeberg.org/killkli/video-dub-cli
@@ -35,12 +29,7 @@ cd video-dub-cli
 uv sync --extra all
 ```
 
-這會建立 `.venv/`，並裝好：
-
-- `dub` CLI
-- 本地 ASR 依賴
-- Gemini 翻譯依賴
-- 標準 VoxCPM route 依賴（`gradio_client` / `opencc`）
+這會建立 `.venv/`，並安裝 `dub` CLI、本地 ASR 依賴、Gemini 翻譯依賴與標準 VoxCPM route 依賴。
 
 ---
 
@@ -59,7 +48,7 @@ sudo apt-get install -y ffmpeg
 ## 5. 設定 Gemini API key
 
 ```bash
-export GOOGLE_API_KEY=your_google_api_key
+export GOOGLE_API_KEY=your_g...
 ```
 
 或：
@@ -69,70 +58,76 @@ cp .env.example .env
 set -a; source .env; set +a
 ```
 
-`dub doctor` 會先看 `GOOGLE_API_KEY`，也接受 `GEMINI_API_KEY`。
+`dub doctor` 會自動從 `~/.zshrc` / `~/.bashrc` 復原 key。
 
 ---
 
-## 6. 確認環境是否可用
+## 6. 確認環境就緒
 
 ```bash
 uv run dub doctor
 ```
 
-你會看到：
+成功時會看到：
 
-- `ffmpeg: OK`
-- `ffprobe: OK`
-- `repo_pipeline_scripts: OK`
-- ASR / Gemini 的 Python 依賴 gate
-- `tts_backends:` 區塊
+```
+doctor ok: ready for `dub auto`, `dub en2zh`, `dub ja2zh`
+next:    uv run dub auto <video>
+```
 
-### 關於 `doctor` 的判讀
-
-- `voxcpme: READY`：代表標準路線可用
-- `omnivoice: BLOCKED`：不一定是錯，表示你**還沒有建立 OmniVoice 專用環境**
-- 如果你需要 OmniVoice，再做下一步
+缺少項目時，`dub doctor` 會列出缺少的項目與修復方式。
 
 ---
 
-## 7. 準備設定檔
+## 7. 第一次直接跑
+
+### `dub auto`（推薦起點）
+
+`dub auto` 會根據設定或 `--source-lang` 自動選擇英文→中文或日文→中文路徑，全程無需指定 `--source-lang` 或 `--target-lang`：
 
 ```bash
-mkdir -p ~/.config/dub
-cp examples/config_en2zh.yaml ~/.config/dub/config.yaml
+# 英文影片 → 中文（自動推斷）
+uv run dub auto talk.mp4
+
+# 日文影片 → 中文（明確指定）
+uv run dub auto anime.mp4 --source-lang ja
+
+# 明確指定英文→中文
+uv run dub auto talk.mp4 --source-lang en
 ```
 
-大多數情況下，這份檔案**不用改**。
+### 語言專用別名
+
+若要明確指定語言方向，可使用專用別名：
+
+```bash
+uv run dub en2zh talk.mp4    # 英文→中文
+uv run dub ja2zh anime.mp4   # 日文→中文
+```
+
+別名內部與 `dub auto` 共用同一套 staged pipeline 合約，只是語言方向已寫死。
+
+### 使用既有翻譯字幕
+
+```bash
+uv run dub auto talk.mp4 \
+  --translate-mode use-existing \
+  --translated-srt talk.zhtw.srt
+```
+
+### 進階入口（需明確控制時使用）
+
+```bash
+uv run dub run talk.mp4 --source-lang en --target-lang zh
+```
+
+`dub run` 保留作為進階 escape hatch；常見情境請用 `dub auto` 或別名。
 
 ---
 
-## 8. 第一次直接跑
+## 8. 找最終輸出
 
-### 英文影片 → 中文
-
-```bash
-uv run dub en2zh /path/to/input/talk.mp4
-```
-
-### 日文影片 → 中文
-
-```bash
-uv run dub ja2zh /path/to/input/anime.mp4
-```
-
-### 進階入口
-
-```bash
-uv run dub run /path/to/input/talk.mp4 --source-lang en --target-lang zh
-```
-
----
-
-## 9. 找最終輸出
-
-輸出專案會建立在影片旁邊，或依設定檔落到指定位置。
-
-最終影片通常在：
+完成時 CLI 會印出最終影片路徑。預設專案目錄為 `<video-stem>.dub/` 在輸入影片旁邊：
 
 ```text
 <project>/07_final/video_dubbed_stem.mp4
@@ -140,7 +135,7 @@ uv run dub run /path/to/input/talk.mp4 --source-lang en --target-lang zh
 
 ---
 
-## 10. 中斷後續跑
+## 9. 續跑
 
 ```bash
 uv run dub resume --project-dir /path/to/project
@@ -148,7 +143,7 @@ uv run dub resume --project-dir /path/to/project
 
 ---
 
-## 11. 查看狀態與驗證
+## 10. 查看狀態與驗證
 
 ```bash
 uv run dub status --project-dir /path/to/project
@@ -157,14 +152,14 @@ uv run dub validate --project-dir /path/to/project
 
 ---
 
-## 12. 清理後重跑
+## 11. 清理後重跑
 
 ```bash
 uv run dub clean --project-dir /path/to/project
 uv run dub resume --project-dir /path/to/project
 ```
 
-如果只要重跑某個 stage：
+若只想重跑某個 stage：
 
 ```bash
 uv run dub clean --project-dir /path/to/project --stage 6
@@ -173,68 +168,33 @@ uv run dub resume --project-dir /path/to/project
 
 ---
 
-## 13. 若你要用 OmniVoice
-
-現在正式做法是：
+## 12. 若要使用 OmniVoice
 
 ```bash
 uv run dub bootstrap-omnivoice --config ~/.config/dub/config.yaml
-```
-
-它會自動：
-
-1. 建立 OmniVoice 專用 venv
-2. 安裝 `video-dub-cli[tts-omnivoice]`
-3. 寫入 `paths.omnivoice_python`
-
-完成後重新驗證：
-
-```bash
 uv run dub doctor --config ~/.config/dub/config.yaml
 ```
 
-如果看到：
+目標是看到 `tts_backends.omnivoice: READY`。
 
-```text
-tts_backends:
-  omnivoice: READY
+---
+
+## 進階：自訂設定檔
+
+多數情境**不需要**設定檔。若需自訂：
+
+```bash
+mkdir -p ~/.config/dub
+cp examples/config_en2zh.yaml ~/.config/dub/config.yaml
 ```
 
-就代表 OmniVoice 路線已可用。
-
 ---
 
-## 14. 目前不要再用的舊說法
-
-以下說法已過期：
-
-- `DUB_OMNIVOICE_ROOT`
-- 需要額外 clone 一份 OmniVoice repo 才能跑
-- 需要額外安裝外部 `qwenasr-mlx` CLI
-
-目前已驗證的正式做法是：
-
-- ASR：repo 內建
-- OmniVoice code：repo 內建
-- OmniVoice heavy deps：由 `dub bootstrap-omnivoice` 自動建立專用環境
-
----
-
-## 15. 出問題先跑什麼
-
-先跑：
+## 出問題先跑什麼
 
 ```bash
 uv run dub doctor
 uv run dub bootstrap
 ```
 
-若是 OmniVoice 問題，再跑：
-
-```bash
-uv run dub bootstrap-omnivoice --config ~/.config/dub/config.yaml
-```
-
-更完整的故障排除請看：
-
-- `docs/operator-runbook.md`
+完整故障排除請看 `docs/operator-runbook.md`。

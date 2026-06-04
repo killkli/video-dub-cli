@@ -1,106 +1,160 @@
 # Release / Handoff Checklist
 
-這份 checklist 用來把 `video-dub-cli` 從目前的 operator-grade 狀態，交接給下一位開發者、操作者，或下一輪產品化工作。重點不是把所有項目都假裝完成，而是明確標示：哪些已驗證、哪些仍待補齊。
+這份 checklist 用來把 `video-dub-cli` 從目前的 operator-grade 狀態交接給下一位開發者或操作者。重點不是把所有項目都假裝完成，而是明確標示：哪些已驗證、哪些仍待補齊。
 
-## 1. Repo / branch 狀態
+## 1. Repo / Branch 狀態
 
-- [ ] 確認目前工作 branch 正確
+- [ ] 目前工作 branch：`feature/standalone-repo-uv`
 - [ ] `git status --short` 為乾淨狀態
 - [ ] README 與 docs 沒有引用不存在的檔案或舊路徑
-- [ ] 最新變更已對應到可讀 commit 訊息
 
-## 2. CLI surface
+## 2. CLI Surface（Phase 1 + AUTO-S1 完成的項目）
 
-- [ ] `dub --help` 可正常顯示，且列出 `en2zh` / `ja2zh`
-- [ ] `dub en2zh --help` 可正常顯示
-- [ ] `dub ja2zh --help` 可正常顯示
-- [ ] `dub run --help` 可正常顯示
-- [ ] `dub resume --help` 可正常顯示
-- [ ] `dub status --help` 可正常顯示
-- [ ] `dub clean --help` 可正常顯示
-- [ ] `dub validate --help` 可正常顯示
+- [ ] `dub --help` 顯示 `auto`, `en2zh`, `ja2zh` 為主要入口，`run` 為 advanced
+- [ ] `dub auto --help` 可正常顯示，說明 `--source-lang` 與 `<video>` 位置參數
+- [ ] `dub en2zh --help` / `dub ja2zh --help` 可正常顯示
+- [ ] `dub run --help` 可正常顯示（escape hatch）
+- [ ] `dub resume --help` / `dub status --help` / `dub clean --help` / `dub validate --help` 可正常顯示
 
-## 3. Supported scenario contract
+## 3. Auto-Workflow 契約（Phase 1-3 + AUTO-S1/S2 完成的項目）
 
-目前應明確以這三類情境為主，其中 operator 主入口已是 alias commands：
+- [ ] `dub auto <VIDEO>` 存在且為 canonical 一鍵入口
+- [ ] `dub auto <VIDEO>` 預設 `--project-dir` 為 `<video-stem>.dub/` 在輸入影片旁邊
+- [ ] `dub auto <VIDEO> --source-lang en` 等於 `dub en2zh <VIDEO>`
+- [ ] `dub auto <VIDEO> --source-lang ja` 等於 `dub ja2zh <VIDEO>`
+- [ ] `dub en2zh` / `dub ja2zh` 為明確語言方向別名（內部與 `dub auto` 共用同一 pipeline 合約）
+- [ ] `dub run` 保留為進階 escape hatch，README / QUICKSTART 不以之為主要起點
+- [ ] 零 flag `dub en2zh <VIDEO>` / `dub ja2zh <VIDEO>` 可完成 end-to-end（AC-1 PASS）
 
-- [ ] `delegate`：fresh run，由 CLI 直接執行翻譯 stage；常見 operator 入口為 `dub en2zh` / `dub ja2zh`
-- [ ] `use-existing`：使用外部已翻譯 SRT
-- [ ] `skip`：僅限既有 project，且 canonical translated subtitle 已存在
+## 4. `dub doctor` 就緒訊息（AC-3）
 
-交接時必須確認文件仍符合目前行為：
+- [ ] 全部 prerequisite 滿足時，`dub doctor` 顯示 `doctor ok: ready for dub auto, dub en2zh, dub ja2zh` 而非泛用訊息
+- [ ] 缺少項目時，`dub doctor` 仍顯示 lane-aware 訊息，列出缺少的項目與修復建議
+- [ ] `dub doctor` 會自動從 `~/.zshrc` / `~/.bashrc` 復原 `GOOGLE_API_KEY` / `GEMINI_API_KEY`，並顯示 `note: auto-recovered ...`
 
-- [ ] canonical translated subtitle path 是 `05_translated_srt/video.zhtw.srt`
-- [ ] legacy sync path `05_translate/video.zhtw.srt` 仍有被正確描述為相容用途，而非主契約
-- [ ] README 對 `skip` 模式的限制說明仍正確
+## 5. Supported Scenario Contract
 
-## 4. Verification baseline
+目前支援三類情境：
 
-最低交接驗證應包含：
+- [ ] `delegate`（預設）：`dub auto` / `en2zh` / `ja2zh` 走 Gemini 翻譯
+- [ ] `use-existing`：附 `--translated-srt` 使用外部已翻譯 SRT
+- [ ] `skip`：僅限既有專案，且 `05_translated_srt/video.zhtw.srt` 已存在
 
-- [ ] targeted unit / integration tests 通過
-- [ ] 至少一條 supported single-command flow 有實際 run 紀錄
-- [ ] `status` / `validate` / `.dub/state.json` 三者對同一條 run 的解讀一致
-- [ ] 最終 MP4 至少能被 `ffprobe` 讀取
+---
 
-建議最小驗證命令：
+## 6. 驗證基線
+
+最低交接驗證：
 
 ```bash
-pytest tests/integration/test_6d_operator_flow.py -q
+# CLI surface
+uv run dub --help
+uv run dub auto --help
+uv run dub en2zh --help
+uv run dub ja2zh --help
+
+# doctor lane-aware message (needs GOOGLE_API_KEY set)
+export GOOGLE_API_KEY=your_key
+uv run dub doctor
+
+# targeted tests
+pytest tests/test_cli.py -q        # 35/35 pass (AUTO-S1 added 2)
 pytest tests/integration/test_6e_route_scenarios.py -q
 ```
 
-如要做文件級 operator 驗證，參考：
+若有實際片源：
 
-- `docs/operator-qa-canonical-flow-2026-06-03.md`（fake-backend support-boundary 記錄）
-- `docs/operator-qa-real-backend-en2zh-2026-06-03.md`（real-backend EN→ZH QA，已成功）
-- `docs/operator-qa-real-backend-ja2zh-2026-06-03.md`（real-backend JA→ZH QA，已成功）
-- `docs/real-backend-verification-gate-2026-06-03.md`（real-backend 閘門與非宣稱邊界）
+```bash
+# real-backend smoke（英文）
+uv run dub en2zh /path/to/talk.mp4
 
-## 4.5 Real-backend productization surface
+# real-backend smoke（日文）
+uv run dub ja2zh /path/to/anime.mp4
+
+# validate output
+uv run dub validate --project-dir /path/to/talk.dub
+
+# resume smoke
+uv run dub resume --project-dir /path/to/talk.dub
+```
+
+---
+
+## 7. Real-Backend Productization Surface
 
 `dub doctor` 與 `uv sync --extra all` 已涵蓋真實 backend 所需依賴：
 
 - [ ] `dub doctor` 顯示 `py:google_genai: OK`
 - [ ] `dub doctor` 顯示 `py:torchcodec: OK`
-- [ ] `dub doctor` 顯示 `omnivoice: READY` 或 `voxcpme: READY`（依本次語言）
-- [ ] `dub doctor` 在 zsh / Hermes shell 中會自動復原 `GOOGLE_API_KEY / GEMINI_API_KEY` 並印出 `auto-recovered ...` note
-- [ ] `uv sync --extra all` 安裝後 `dub doctor` 直接 green，無需再手動 `pip install`
+- [ ] `dub doctor` 顯示 `omnivoice: READY` 或 `voxcpme: READY`（依本次語言與配置）
+- [ ] `uv sync --extra all` 安裝後 `dub doctor` 可直接 green，無需再手動 `pip install`
 
-## 5. Config / examples
+---
 
-- [ ] `examples/` 內檔名與 README 引用一致
-- [ ] `config_delegate_en2zh.yaml` 與 `config_use_existing_en2zh.yaml` 都可作為 canonical example
+## 8. Config / Examples
+
+- [ ] `examples/config_delegate_en2zh.yaml` 為 canonical delegate 範例
+- [ ] `examples/config_en2zh.yaml` 為向後相容 alias（指向 canonical）
+- [ ] `examples/config_ja2zh.yaml` 為日文→中文範例
+- [ ] `examples/config_use_existing_en2zh.yaml` 為外部字幕情境範例
 - [ ] 沒有殘留會誤導使用者的舊欄位名稱或舊目錄假設
 
-## 6. Non-productized gaps
+---
 
-交接時不要隱藏以下風險：
+## 9. 目前可以誠實宣稱的範圍
 
-- [ ] 真實模型品質驗證仍需獨立做，不可由 fake backend QA 替代
-- [ ] 任意陌生片源的一次成功率尚未被產品級驗證
-- [ ] 外部技能腳本（ASR / TTS / assemble）的 availability 與品質仍依賴外部環境
-- [ ] operator UX 仍偏工程向，錯誤訊息與引導仍可持續收斂
+### 已驗證
 
-## 7. Recommended next wave
-## 7. Recommended next wave
-如果要接續下一輪工作，建議優先順序：
+```
+uv sync --extra all
+uv run dub --help
+uv run dub auto --help
+uv run dub doctor                    # 自動從 ~/.zshrc 復原 Gemini key
+uv run dub bootstrap                 # 列出 bootstrap 選項
+uv run dub bootstrap-omnivoice
+uv run dub bootstrap-voxcpm
+uv run dub auto <VIDEO>              # canonical one-command entrypoint
+uv run dub en2zh <VIDEO>            # explicit English→Chinese alias
+uv run dub ja2zh <VIDEO>            # explicit Japanese→Chinese alias
+dub resume / status / validate / clean
+```
+
+### 不應過度宣稱
+
+- 不是所有 TTS backend 都在同一個 Python 環境內完成安裝
+- OmniVoice 仍採「標準 dub venv + 專用 OmniVoice venv」雙環境契約
+- VoxCPM 依賴本機服務（`127.0.0.1:8808`）
+
+---
+
+## 10. 非產品化缺口（交接時不要隱藏）
+
+- 真實模型品質驗證仍需獨立做，不可由 fake backend QA 替代
+- 任意陌生片源的一次成功率尚未被產品級驗證
+- 外部技能腳本（ASR / TTS / assemble）的 availability 與品質仍依賴外部環境
+- operator UX 仍偏工程向，錯誤訊息與引導仍可持續收斂
+
+---
+
+## 11. 建議的下一波工作
+
 1. 任意陌生片源 / 多語境 / 雜訊場景的 real-backend regression wave
 2. release smoke script：一鍵跑 help + integration + real-backend operator QA
 3. 失敗場景 handoff：整理常見錯誤與修復手冊
-4. 若 alias commands 再擴充，README / QUICKSTART / runbook / checklist 要同波更新
+4. 若 alias commands 再擴充（e.g. `dub zh2en`），README / QUICKSTART / runbook / checklist 要同波更新
 
-## 8. Handoff verdict template
+---
 
-交接時可直接用這段摘要：
+## 12. Handoff 摘要（可直接複製）
 
-```text
+```
 video-dub-cli 目前已具備 operator-grade single-command workflow。
-常見 operator 主入口為 `dub en2zh` / `dub ja2zh`；`dub run` 保留作進階底層入口。
-已驗證的支援情境包括 delegate / use-existing / existing-project skip。
-state / validate / integration coverage 已對齊。
+canonical 入口為 `dub auto <VIDEO>`，自動推斷英文→中文或日文→中文路由。
+`dub en2zh` / `dub ja2zh` 為明確語言方向別名，內部與 `dub auto` 共用同一 pipeline 合約。
+`dub run` 保留為進階 escape hatch。
+`dub doctor` 成功時顯示 `ready for dub auto, dub en2zh, dub ja2zh`。
 `uv sync --extra all` + `dub doctor` 已是 real-backend productization surface：
-real ASR / Gemini 與標準 VoxCPM route 所需依賴已收斂；OmniVoice 與獨立 VoxCPM interpreter 則透過 `dub bootstrap-omnivoice` / `dub bootstrap-voxcpm` 建立。`dub doctor` 會自動從
-`~/.zshrc` 復原 Gemini key，並逐 gate 報告每一個 readiness 狀態。
-`dub en2zh` / `dub ja2zh` 已有真實片源 end-to-end QA 紀錄。
+real ASR / Gemini 與標準 VoxCPM route 所需依賴已收斂；
+OmniVoice 與獨立 VoxCPM interpreter 由 `dub bootstrap-omnivoice` / `dub bootstrap-voxcpm` 建立。
+`dub en2zh` / `dub ja2zh` 已有真實片源 end-to-end QA 紀錄（見 docs/operator-qa-real-backend-*）。
 ```
