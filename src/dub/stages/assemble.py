@@ -42,6 +42,7 @@ Real wire via repo-owned scripts under `vendor/pipeline_scripts/`
 """
 from __future__ import annotations
 
+import resource
 import shutil
 import subprocess
 import tempfile
@@ -51,6 +52,43 @@ from dub.config import DubConfig
 from dub.runtime_paths import pipeline_script
 from dub.state import now_iso
 from dub.stages.base import Stage, StageState
+
+
+# macOS ships RLIMIT_NOFILE=256 by default. The fulltrack builder opens one fd
+# per TTS clip (265 clips in a 20-min chunk) inside a single filter_complex,
+# which exhausts the soft limit mid-run with `Error opening input: Too many
+# open files`. Bumping the soft limit pre-fork is harmless on Linux/POSIX
+# (their defaults are already higher) and the hard limit is unaffected, so
+# this cannot be exploited to elevate beyond the kernel ceiling.
+#
+# Linux default soft limit is 1024; macOS pre-13 is 256, post-13 sometimes
+# 1024. 4096 covers all currently-supported operator hardware (incl. long
+# videos that produce 400+ TTS clips) while staying well under the typical
+# hard limit of 524288 on macOS / 1048576 on Linux.
+_FD_SOFT_LIMIT_FOR_FFMPEG = 4096
+
+
+def _raise_fd_limit_preexec() -> None:
+    """pre-exec hook: raise RLIMIT_NOFILE soft cap for the child process.
+
+    Runs only in the forked child before exec, so the parent process is
+    unaffected. Silently no-ops if the requested soft limit exceeds the
+    hard limit (setrlimit raises ValueError); the child then inherits
+    whatever limit the kernel gave us.
+    """
+    try:
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        target = max(soft, _FD_SOFT_LIMIT_FOR_FFMPEG)
+        # Only raise, never lower. Clamp to hard to avoid EPERM-like failures.
+        if target > hard > 0:
+            target = hard
+        if target > soft:
+            resource.setrlimit(resource.RLIMIT_NOFILE, (target, hard))
+    except (ValueError, OSError):
+        # Best-effort: if we can't raise it, the child will see whatever
+        # the parent had. Loudnorm builder will fail loudly with
+        # "Too many open files" and the operator can fix it externally.
+        pass
 
 
 # Minimum size for any produced mp4 to be considered real. A failed remix
@@ -145,6 +183,10 @@ class AssembleStage(Stage):
                 r1 = subprocess.run(
                     loudnorm_cmd,
                     stdout=log_fh, stderr=subprocess.STDOUT, check=False,
+                    # macOS RLIMIT_NOFILE=256 is too low for 250+ clip fulltrack
+                    # builds; raise the child limit pre-fork. See
+                    # _raise_fd_limit_preexec for the rationale.
+                    preexec_fn=_raise_fd_limit_preexec,
                 )
                 if r1.returncode != 0:
                     state.status = "failed"
@@ -202,6 +244,8 @@ class AssembleStage(Stage):
                 stdout=log_fh,
                 stderr=subprocess.STDOUT,
                 check=False,
+                # Same macOS fd-limit rationale as the loudnorm call above.
+                preexec_fn=_raise_fd_limit_preexec,
             )
 
         if result.returncode != 0:
