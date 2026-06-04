@@ -176,7 +176,7 @@ def _format_preflight_gate(name: str, ok: bool, detail: str) -> str:
     return f"{name}={status}({detail})"
 
 
-def _run_preflight(project_dir: Path, cfg, source_lang: str) -> str:
+def _run_preflight(project_dir: Path, cfg, source_lang: str, route_basis: str | None = None) -> str:
     """Run the centralized route-specific preflight checks.
 
     This is the single contract shared by ``dub auto``, ``dub en2zh``,
@@ -256,9 +256,10 @@ def _run_preflight(project_dir: Path, cfg, source_lang: str) -> str:
     parts = " ".join(
         _format_preflight_gate(name, ok, detail) for name, ok, detail in gates
     )
+    basis_token = f" route_basis={route_basis}" if route_basis else ""
     return (
         f"preflight: src={source_lang} tgt={cfg.defaults.target_lang} "
-        f"project={project_dir} {route_summary} {parts}"
+        f"project={project_dir} {route_summary} {parts}{basis_token}"
     )
 
 
@@ -631,6 +632,7 @@ def _run_pipeline_command(
     inst_gain: float | None,
     keep_fulltrack: bool,
     yes: bool,
+    route_basis: str | None = None,
 ) -> None:
     try:
         cfg = load_config(config_path)
@@ -646,7 +648,7 @@ def _run_pipeline_command(
         pdir = _prepare_project(video, str(project_dir) if project_dir else None, cfg)
         click.echo(_operator_paths_summary("run plan", pdir))
         _validate_run_contract(pdir, cfg)
-        click.echo(_run_preflight(pdir, cfg, cfg.defaults.source_lang))
+        click.echo(_run_preflight(pdir, cfg, cfg.defaults.source_lang, route_basis=route_basis))
         _bootstrap_state(pdir, cfg)
         _refresh_runtime_input_state(pdir, cfg)
         run_pipeline(pdir, cfg, yes=yes)
@@ -696,7 +698,10 @@ def run(video, source_lang, target_lang, project_dir, config_path,
     "--source-lang",
     "source_lang",
     default=None,
-    help="Source language route for the one-command workflow (supported: en, ja). Defaults to config/defaults.source_lang.",
+    help="Source language route for the one-command workflow (supported: en, ja). "
+         "When omitted, `dub auto` auto-detects the source language from the "
+         "input video via a short audio head-probe; ambiguous detections fail "
+         "fast and ask the operator to re-run with --source-lang en|ja.",
 )
 @click.option("--project-dir", type=click.Path(path_type=Path), default=None,
               help="Project directory (default: <video-stem>.dub/ next to the input video).")
@@ -716,18 +721,43 @@ def auto(video, source_lang, project_dir, config_path, translate_mode, translate
 
     This productized entrypoint resolves the source-language route first,
     then dispatches to the same staged pipeline contract used by the
-    explicit `en2zh` and `ja2zh` commands. Use `--source-lang en|ja` to
-    override config/defaults.source_lang when needed.
+    explicit `en2zh` and `ja2zh` commands.
+
+    Wave-3 resolution precedence (T3):
+
+    1. Explicit `--source-lang en|ja` (normalized) always wins, even
+       when auto-detection would have picked a different route. The
+       preflight line prints `route_basis=override:explicit-flag` so
+       operators can audit the bypass.
+    2. With no flag, `dub auto` runs the auto detector — a 30-second
+       audio head-probe transcribed by the repo ASR pipeline and
+       classified by character script. The preflight line prints
+       `route_basis=detected:<lang>-asr-head`.
+    3. Ambiguous detection (no audio track, mixed script, ASR
+       unavailable, etc.) fails fast *before* any stage work starts;
+       `dub auto` does not silently fall back to
+       `cfg.defaults.source_lang`. The error message tells the
+       operator to re-run with `--source-lang en|ja`.
     """
     try:
         cfg = load_config(config_path)
-        resolved_source_lang = _resolve_auto_source_lang(source_lang, cfg)
+        decision = _resolve_auto_route(video, source_lang, cfg)
     except UserError as exc:
         raise click.ClickException(str(exc)) from exc
+    if decision.source_lang is None:
+        # Ambiguous detection: fail fast with the operator guidance
+        # the T1 contract requires. We intentionally do NOT fall
+        # back to `cfg.defaults.source_lang` here — that was the
+        # old route-aware behavior wave 3 retires.
+        raise click.ClickException(
+            "Could not confidently detect source language for dub auto "
+            f"(basis: {decision.basis}; supported: en, ja). "
+            "Re-run with --source-lang en|ja."
+        )
     effective_project_dir = project_dir if project_dir is not None else _default_auto_project_dir(video)
     _run_pipeline_command(
         video,
-        source_lang=resolved_source_lang,
+        source_lang=decision.source_lang,
         target_lang="zh",
         project_dir=effective_project_dir,
         config_path=config_path,
@@ -737,6 +767,7 @@ def auto(video, source_lang, project_dir, config_path, translate_mode, translate
         inst_gain=inst_gain,
         keep_fulltrack=keep_fulltrack,
         yes=yes,
+        route_basis=decision.basis,
     )
 
 
