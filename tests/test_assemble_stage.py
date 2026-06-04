@@ -97,8 +97,14 @@ def _record_subprocess(
         calls.append({"cmd": list(cmd)})
         cmd_strs = [str(x) for x in cmd]
 
-        # Time-aligned loudnorm builder: required source of tts_normalized.wav.
-        if any("dubbing_assemble_loudnorm" in s for s in cmd_strs):
+        # Time-aligned loudnorm / batched tts assembler: required source of
+        # tts_normalized.wav. Both are routed here because they share the
+        # step-1 contract (write tts_normalized.wav + optionally fulltrack).
+        is_step1 = (
+            any("dubbing_assemble_loudnorm" in s for s in cmd_strs)
+            or any("assemble_tts_batched" in s for s in cmd_strs)
+        )
+        if is_step1:
             if step1_returncode == 0:
                 if step1_should_write_normalized:
                     save_idx = cmd_strs.index("--save-normalized-wav")
@@ -642,3 +648,79 @@ def test_run_full_happy_path_produces_all_expected_artifacts(tmp_path, monkeypat
     assert (proj / ".dub" / "06_assemble_step1_tts.log").exists()
     # Step 2 (remix) log file is written
     assert (proj / ".dub" / "06_assemble_remix.log").exists()
+
+
+# ── Batched assembler routing (defaults.use_batched_assembler) ────────────────
+
+
+def test_uses_loudnorm_by_default(monkeypatch, tmp_path):
+    """Default config (use_batched_assembler=False) keeps the legacy path.
+
+    The legacy dubbing_assemble_loudnorm.py must be invoked; the batched
+    variant must NOT be invoked. This guards against silent regression
+    where the default flips to the new path.
+    """
+    proj = _make_project(tmp_path)
+    fake_run, calls = _record_subprocess(proj)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    state = AssembleStage().run(proj, DubConfig())
+    assert state.status == "done"
+
+    invoked_paths = [str(x) for c in calls for x in c["cmd"]]
+    assert any("dubbing_assemble_loudnorm" in p for p in invoked_paths), \
+        "default config must invoke legacy loudnorm builder"
+    assert not any("assemble_tts_batched" in p for p in invoked_paths), \
+        "default config must NOT invoke the batched variant"
+
+
+def test_uses_batched_assembler_when_configured(monkeypatch, tmp_path):
+    """use_batched_assembler=True routes the step-1 builder to the batched script.
+
+    Verifies the actual argv contains the batched script path AND the
+    --batch-size flag (default 30), and that the legacy loudnorm script
+    is NOT invoked.
+    """
+    proj = _make_project(tmp_path)
+    fake_run, calls = _record_subprocess(proj)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    cfg = DubConfig()
+    cfg.defaults.use_batched_assembler = True
+    state = AssembleStage().run(proj, cfg)
+    assert state.status == "done"
+
+    invoked_paths = [str(x) for c in calls for x in c["cmd"]]
+    assert any("assemble_tts_batched" in p for p in invoked_paths), \
+        "use_batched_assembler=True must invoke the batched script"
+    assert not any("dubbing_assemble_loudnorm" in p for p in invoked_paths), \
+        "use_batched_assembler=True must NOT invoke the legacy loudnorm"
+
+    # --batch-size is an assemble_tts_batched.py-specific flag; verify it
+    # was forwarded. The default is 30, but to make this assertion hold
+    # independently of the default we read the actual config value.
+    flat = [str(x) for c in calls for x in c["cmd"]]
+    assert "--batch-size" in flat, "batched assembler must receive --batch-size"
+    batch_idx = flat.index("--batch-size")
+    assert flat[batch_idx + 1] == str(cfg.defaults.tts_batch_size)
+
+
+def test_custom_batch_size_forwarded(monkeypatch, tmp_path):
+    """tts_batch_size override must be forwarded to assemble_tts_batched.py.
+
+    Guards the wiring: setting tts_batch_size=10 must show up in argv
+    verbatim, not silently get overridden by the default 30.
+    """
+    proj = _make_project(tmp_path)
+    fake_run, calls = _record_subprocess(proj)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    cfg = DubConfig()
+    cfg.defaults.use_batched_assembler = True
+    cfg.defaults.tts_batch_size = 10
+    state = AssembleStage().run(proj, cfg)
+    assert state.status == "done"
+
+    flat = [str(x) for c in calls for x in c["cmd"]]
+    assert "--batch-size" in flat
+    assert flat[flat.index("--batch-size") + 1] == "10"

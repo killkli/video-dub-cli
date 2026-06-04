@@ -50,6 +50,15 @@ class DefaultsConfig(BaseModel):
     vocal_gain: float = 3.0
     inst_gain: float = -3.0
     keep_fulltrack: bool = False
+    # TTS assembler routing. Default is the legacy single-filter_complex
+    # path (dubbing_assemble_loudnorm.py); flip use_batched_assembler=True
+    # to switch to the batched variant (assemble_tts_batched.py) which
+    # keeps each filter_complex under the FFmpeg command-line length
+    # limit and is the supported path for 60+ clip videos. See
+    # vendor/pipeline_scripts/assemble_tts_batched.py for the batching
+    # contract.
+    use_batched_assembler: bool = False
+    tts_batch_size: int = 30
 
 
 class RetryConfig(BaseModel):

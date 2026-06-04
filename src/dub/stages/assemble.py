@@ -139,8 +139,9 @@ class AssembleStage(Stage):
             state.error = f"no TTS wavs in {tts_dir} (Stage 5 did not produce output)"
             return state
 
-        # ── Step 1: build time-aligned tts_normalized.wav via canonical
-        #           dubbing_assemble_loudnorm.py ───────────────────────────────
+        # ── Step 1: build time-aligned tts_normalized.wav via either the
+        #           single-filter_complex loudnorm builder or its batched
+        #           sibling, depending on config.defaults.use_batched_assembler.
         tts_normalized = tts_dir / "tts_normalized.wav"
         zh_srt = project_dir / "05_translated_srt" / "video.zhtw.srt"
         if not zh_srt.exists():
@@ -149,11 +150,16 @@ class AssembleStage(Stage):
             state.error = f"translated zh SRT missing: {zh_srt}"
             return state
 
-        loudnorm_script = pipeline_script("dubbing_assemble_loudnorm.py")
-        if not loudnorm_script.exists():
+        if config.defaults.use_batched_assembler:
+            assembler_script = pipeline_script("assemble_tts_batched.py")
+            assembler_label = "batched tts assembler"
+        else:
+            assembler_script = pipeline_script("dubbing_assemble_loudnorm.py")
+            assembler_label = "time-aligned loudnorm builder"
+        if not assembler_script.exists():
             state.status = "failed"
             state.finished_at = now_iso()
-            state.error = f"loudnorm script not found: {loudnorm_script}"
+            state.error = f"{assembler_label} script not found: {assembler_script}"
             return state
 
         step1_log = project_dir / ".dub" / f"{self.name}_step1_tts.log"
@@ -171,17 +177,24 @@ class AssembleStage(Stage):
                 temp_fulltrack = Path(tempfile.mkstemp(prefix="vdub_fulltrack_", suffix=".mp4", dir=str(project_dir / ".dub"))[1])
                 fulltrack_output = temp_fulltrack
 
-            loudnorm_cmd = [
-                "python3", str(loudnorm_script),
+            assembler_cmd = [
+                "python3", str(assembler_script),
                 "--video", str(source_video),
                 "--zh-srt", str(zh_srt),
                 "--tts-dir", str(tts_dir),
                 "--output", str(fulltrack_output),
                 "--save-normalized-wav", str(tts_normalized),
             ]
+            # The batched assembler takes an extra --batch-size flag. Only
+            # the batched variant understands it; passing it to the legacy
+            # loudnorm script would be a hard argparse error. Add it
+            # conditionally to keep the legacy path byte-compatible.
+            if config.defaults.use_batched_assembler:
+                assembler_cmd += ["--batch-size", str(config.defaults.tts_batch_size)]
+
             with open(step1_log, "w") as log_fh:
                 r1 = subprocess.run(
-                    loudnorm_cmd,
+                    assembler_cmd,
                     stdout=log_fh, stderr=subprocess.STDOUT, check=False,
                     # macOS RLIMIT_NOFILE=256 is too low for 250+ clip fulltrack
                     # builds; raise the child limit pre-fork. See
@@ -191,20 +204,20 @@ class AssembleStage(Stage):
                 if r1.returncode != 0:
                     state.status = "failed"
                     state.finished_at = now_iso()
-                    state.error = f"time-aligned loudnorm builder exit {r1.returncode}; see {step1_log}"
+                    state.error = f"{assembler_label} exit {r1.returncode}; see {step1_log}"
                     return state
 
             if not tts_normalized.exists() or tts_normalized.stat().st_size <= _MIN_MP4_BYTES:
                 state.status = "failed"
                 state.finished_at = now_iso()
-                state.error = f"time-aligned loudnorm builder produced no/empty normalized wav: {tts_normalized}"
+                state.error = f"{assembler_label} produced no/empty normalized wav: {tts_normalized}"
                 return state
 
             if config.defaults.keep_fulltrack:
                 if not out_fulltrack.exists() or out_fulltrack.stat().st_size <= _MIN_MP4_BYTES:
                     state.status = "failed"
                     state.finished_at = now_iso()
-                    state.error = f"time-aligned loudnorm builder exited 0 but {out_fulltrack} missing or too small; see {step1_log}"
+                    state.error = f"{assembler_label} exited 0 but {out_fulltrack} missing or too small; see {step1_log}"
                     return state
             elif temp_fulltrack is not None and temp_fulltrack.exists():
                 temp_fulltrack.unlink()
