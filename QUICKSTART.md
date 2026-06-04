@@ -73,6 +73,8 @@ uv run dub doctor
 ```
 doctor ok: ready for `dub auto`, `dub en2zh`, `dub ja2zh`
 next:    uv run dub auto <video>
+
+# 若某一路徑 backend 未就緒，doctor 會改印 `doctor lanes: ready=... ; blocked=...`
 ```
 
 缺少項目時，`dub doctor` 會列出缺少的項目與修復方式。

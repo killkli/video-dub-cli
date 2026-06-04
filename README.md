@@ -84,7 +84,7 @@ uv run dub --help
 uv run dub doctor
 ```
 
-`dub doctor` 會報告 `ready for dub auto` 或列出缺少的項目。
+`dub doctor` 會報告 lane-aware readiness：雙路都可用時顯示 `ready for dub auto, dub en2zh, dub ja2zh`；若只剩單一路徑可用，會分別列出 ready / blocked lanes 與缺少項目。
 
 ---
 
@@ -148,6 +148,9 @@ uv run dub clean --project-dir /path/to/project
 ```
 doctor ok: ready for `dub auto`, `dub en2zh`, `dub ja2zh`
 next:    uv run dub auto <video>
+
+# 若只有單一路徑可用，會改成類似：
+doctor lanes: ready=`dub ja2zh` ; blocked=`dub en2zh`
 ```
 
 失敗時列出缺少的項目與修復建議。

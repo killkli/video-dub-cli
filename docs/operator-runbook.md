@@ -20,7 +20,7 @@ uv run dub bootstrap
 - `BLOCKED`：某條 backend 路線尚未就緒
 - `READY`：該 backend 路線可用
 
-成功時 `dub doctor` 會顯示 `ready for dub auto` 或 `ready for dub en2zh / dub ja2zh`。
+成功時 `dub doctor` 會顯示 `ready for dub auto, dub en2zh, dub ja2zh`。若只剩單一路徑可用，會改顯示 `doctor lanes: ready=... ; blocked=...`，讓 operator 直接知道哪一條線還不能跑。
 
 若是 OmniVoice 問題，再補跑：
 

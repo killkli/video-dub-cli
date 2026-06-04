@@ -28,8 +28,8 @@
 
 ## 4. `dub doctor` 就緒訊息（AC-3）
 
-- [ ] 全部 prerequisite 滿足時，`dub doctor` 顯示 `doctor ok: ready for dub auto, dub en2zh, dub ja2zh` 而非泛用訊息
-- [ ] 缺少項目時，`dub doctor` 仍顯示 lane-aware 訊息，列出缺少的項目與修復建議
+- [ ] 全部 prerequisite 與 route backend 都滿足時，`dub doctor` 顯示 `doctor ok: ready for dub auto, dub en2zh, dub ja2zh` 而非泛用訊息
+- [ ] 若只有部分 route 可用，`dub doctor` 顯示 lane-aware 訊息（例如 `doctor lanes: ready=... ; blocked=...`），列出缺少的項目與修復建議
 - [ ] `dub doctor` 會自動從 `~/.zshrc` / `~/.bashrc` 復原 `GOOGLE_API_KEY` / `GEMINI_API_KEY`，並顯示 `note: auto-recovered ...`
 
 ## 5. Supported Scenario Contract
@@ -152,7 +152,7 @@ video-dub-cli 目前已具備 operator-grade single-command workflow。
 canonical 入口為 `dub auto <VIDEO>`，自動推斷英文→中文或日文→中文路由。
 `dub en2zh` / `dub ja2zh` 為明確語言方向別名，內部與 `dub auto` 共用同一 pipeline 合約。
 `dub run` 保留為進階 escape hatch。
-`dub doctor` 成功時顯示 `ready for dub auto, dub en2zh, dub ja2zh`。
+`dub doctor` 只有在全部 shared prerequisites 與 route backends 都 ready 時，才顯示 `ready for dub auto, dub en2zh, dub ja2zh`；否則會改用 lane-aware ready/blocked 訊息。
 `uv sync --extra all` + `dub doctor` 已是 real-backend productization surface：
 real ASR / Gemini 與標準 VoxCPM route 所需依賴已收斂；
 OmniVoice 與獨立 VoxCPM interpreter 由 `dub bootstrap-omnivoice` / `dub bootstrap-voxcpm` 建立。

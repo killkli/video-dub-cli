@@ -1010,8 +1010,37 @@ def test_dub_doctor_success_message_names_auto_workflow_lane(runner, monkeypatch
 
     result = runner.invoke(main, ["doctor"])
     assert result.exit_code == 0, result.output
-    assert "ready for `dub en2zh` / `dub ja2zh`" in result.output
-    assert "run `dub en2zh <VIDEO>`" in result.output
+    assert "ready for `dub auto`, `dub en2zh`, `dub ja2zh`" in result.output
+    assert "run `dub auto <VIDEO>`" in result.output
+
+
+def test_dub_doctor_fails_when_any_route_backend_is_blocked(runner, monkeypatch):
+    """AUTO-S5: doctor must not claim both lanes are ready when one route's
+    TTS backend is blocked. It should exit non-zero and print lane-aware
+    ready/blocked status for the operator.
+    """
+    import dub.cli as cli_mod
+    from dub.tts_engines.contract import TtsReadiness
+
+    monkeypatch.setattr("dub.cli._auto_recover_missing_secrets", lambda: [])
+    monkeypatch.setattr("dub.cli._which_status", lambda _name: (True, "/bin/fake"))
+    monkeypatch.setattr("dub.cli._path_status", lambda _p: (True, "/fake/path"))
+    monkeypatch.setattr("dub.cli._env_status", lambda *_names: (True, "GOOGLE_API_KEY"))
+    monkeypatch.setattr("dub.tts_engines.diagnostics.python_imports", lambda _name: ("ok", "/fake/import/path.py"))
+
+    blocked_omni = TtsReadiness(backend="omnivoice", ready=False, detail="missing transformers", checks=[])
+    ready_vox = TtsReadiness(backend="voxcpme", ready=True, detail="ready", checks=[])
+    monkeypatch.setattr(cli_mod, "omnivoice_readiness", lambda _cfg: blocked_omni)
+    monkeypatch.setattr(cli_mod, "voxcpme_readiness", lambda _cfg: ready_vox)
+    monkeypatch.setattr(cli_mod, "builtin_backends", lambda: ("omnivoice", "voxcpme"))
+
+    result = runner.invoke(main, ["doctor"])
+    assert result.exit_code != 0, result.output
+    assert "doctor found missing prerequisites" in result.output
+    assert "doctor lanes:" in result.output
+    assert "ready=`dub ja2zh`" in result.output
+    assert "blocked=`dub en2zh`" in result.output
+    assert "ready for `dub auto`, `dub en2zh`, `dub ja2zh`" not in result.output
 
 
 def test_dub_doctor_failure_message_still_names_lane(runner, monkeypatch, tmp_path):

@@ -748,18 +748,40 @@ def doctor(config_path):
         "voxcpme": voxcpme_readiness(cfg),
     }
     click.echo("tts_backends:")
+    ready_routes: list[str] = []
+    blocked_routes: list[str] = []
+    backend_to_route = {
+        "omnivoice": "dub en2zh",
+        "voxcpme": "dub ja2zh",
+    }
     for backend_name in builtin_backends():
         readiness = readiness_by_backend[backend_name]
         status = "READY" if readiness.ready else "BLOCKED"
         click.echo(f"  {backend_name}: {status} ({readiness.detail})")
+        route_name = backend_to_route.get(backend_name)
+        if route_name is not None:
+            if readiness.ready:
+                ready_routes.append(route_name)
+            else:
+                blocked_routes.append(route_name)
+                all_ok = False
         for gate, gate_status, detail in readiness.checks:
             click.echo(f"    - {gate}: {gate_status} ({detail})")
 
     if all_ok:
-        click.echo("doctor ok: ready for `dub en2zh` / `dub ja2zh`")
-        click.echo("doctor next: run `dub en2zh <VIDEO>` (or `dub ja2zh <VIDEO>`) to dub end-to-end")
-    else:
-        raise click.ClickException("doctor found missing prerequisites")
+        click.echo("doctor ok: ready for `dub auto`, `dub en2zh`, `dub ja2zh`")
+        click.echo("doctor next: run `dub auto <VIDEO>` (or `dub en2zh <VIDEO>` / `dub ja2zh <VIDEO>`) to dub end-to-end")
+        return
+
+    if ready_routes or blocked_routes:
+        route_parts: list[str] = []
+        if ready_routes:
+            route_parts.append("ready=" + ", ".join(f"`{route}`" for route in ready_routes))
+        if blocked_routes:
+            route_parts.append("blocked=" + ", ".join(f"`{route}`" for route in blocked_routes))
+        click.echo("doctor lanes: " + " ; ".join(route_parts))
+
+    raise click.ClickException("doctor found missing prerequisites")
 
 
 @main.command()
