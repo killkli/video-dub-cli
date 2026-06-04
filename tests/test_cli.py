@@ -609,28 +609,141 @@ def test_dub_auto_uses_explicit_source_lang_and_completes(runner, tmp_path, monk
     assert state.input["target_lang"] == "zh"
 
 
-def test_dub_auto_uses_config_default_source_lang_when_flag_missing(runner, tmp_path, monkeypatch):
-    video = tmp_path / "video.mp4"
-    video.write_bytes(b"fake")
-    project_dir = tmp_path / "proj"
-    cfg = tmp_path / "cfg.yaml"
-    cfg.write_text(
-        "defaults:\n"
-        "  source_lang: ja\n"
-        "paths:\n"
-        "  qwenasr_cli: /bin/true\n"
-        "  omnivoice_python: /bin/true\n"
-        "  skills_dir: /tmp/vendor/pipeline_scripts\n"
-        "  translation_skill: /bin/true\n",
-        encoding="utf-8",
-    )
+# ---------------------------------------------------------------------------
+# Auto route-detection contract (T2 — auto workflow wave 3)
+# ---------------------------------------------------------------------------
+#
+# These tests pin the new "truly automatic" `dub auto` contract that T3 will
+# implement. They intentionally FAIL today because:
+#   1. `dub.cli._detect_auto_source_lang(...)` does not exist yet
+#   2. `dub auto` still silently falls back to `cfg.defaults.source_lang`
+#      when the flag is missing, instead of running the detector
+#   3. The ambiguous / unsupported error wording is still the old one
+#      (`dub auto requires source language en or ja`); the new contract
+#      tells the operator to re-run with `--source-lang en|ja`.
+#
+# Test contract surface (mirrored in src/dub/cli.py via T3):
+#   * `dub.cli._detect_auto_source_lang(video, cfg) -> AutoRouteDecision`
+#     - returns object with `.source_lang ∈ {"en","ja"}` and `.basis: str`
+#     - raises / returns a sentinel for ambiguous detection
+#   * `dub auto` precedence:
+#       1) explicit `--source-lang` (normalized to en/ja) wins
+#       2) `_detect_auto_source_lang(video, cfg)` runs
+#       3) ambiguous detection → early failure with re-run guidance
+#   * Preflight / completion output must include the chosen route and project
+#     directory (e.g. `route_basis=detected:...` token in addition to the
+#     existing `preflight: src=... tgt=... project=...` line).
+# ---------------------------------------------------------------------------
 
+
+def _auto_decision_stub(monkeypatch, *, source_lang, basis="detected:probe-stub"):
+    """Patch the T3 detector seam with a deterministic stub.
+
+    Returns the patched callable so individual tests can introspect calls
+    if they need to (e.g. assert the override branch never invoked it).
+    """
+    from dub.cli import AutoRouteDecision  # type: ignore[attr-defined]
+
+    stub = lambda video, cfg: AutoRouteDecision(  # noqa: E731
+        source_lang=source_lang,
+        basis=basis,
+    )
+    monkeypatch.setattr("dub.cli._detect_auto_source_lang", stub)
+    return stub
+
+
+def _patch_pipeline_and_input_info(monkeypatch, project_dir):
     monkeypatch.setattr("dub.cli.project_input_info", lambda _: {
         "video_path": str(project_dir / "01_raw_video" / "video.mp4"),
         "video_sha256": "abc",
         "duration_sec": 1.23,
     })
     monkeypatch.setattr("dub.cli.run_pipeline", lambda *args, **kwargs: {"ok": True})
+
+
+def _write_minimal_auto_cfg(cfg: Path, *, with_defaults_source_lang: bool = False) -> None:
+    body = ["paths:"]
+    body.append("  qwenasr_cli: /bin/true")
+    body.append("  omnivoice_python: /bin/true")
+    body.append("  skills_dir: /tmp/vendor/pipeline_scripts")
+    body.append("  translation_skill: /bin/true")
+    if with_defaults_source_lang:
+        body.append("defaults:")
+        body.append("  source_lang: ja")
+    cfg.write_text("\n".join(body) + "\n", encoding="utf-8")
+
+
+def test_dub_auto_explicit_source_lang_overrides_detector(runner, tmp_path, monkeypatch):
+    """Explicit `--source-lang` must win even if the detector would disagree."""
+    video = tmp_path / "video.mp4"
+    video.write_bytes(b"fake")
+    project_dir = tmp_path / "proj"
+    cfg = tmp_path / "cfg.yaml"
+    _write_minimal_auto_cfg(cfg, with_defaults_source_lang=True)
+    _patch_pipeline_and_input_info(monkeypatch, project_dir)
+    # Detector would have said "ja"; explicit override must force "en".
+    _auto_decision_stub(monkeypatch, source_lang="ja", basis="detected:should-be-ignored")
+
+    result = runner.invoke(
+        main,
+        [
+            "auto", str(video),
+            "--source-lang", "en",
+            "--project-dir", str(project_dir),
+            "--config", str(cfg),
+            "--yes",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "preflight: src=en tgt=zh" in result.output
+    state = load_state(project_dir)
+    assert state.input["source_lang"] == "en"
+    assert state.input["target_lang"] == "zh"
+    # Operator-visible evidence that the override branch — not detection —
+    # was the basis. Exact token wording is T3's choice; the T1 contract
+    # says something like `route_basis=override:explicit-flag` is acceptable.
+    assert "route_basis=override" in result.output
+
+
+def test_dub_auto_detects_english_when_no_flag(runner, tmp_path, monkeypatch):
+    """With no flag, the detector's English verdict becomes src=en."""
+    video = tmp_path / "video.mp4"
+    video.write_bytes(b"fake")
+    project_dir = tmp_path / "proj"
+    cfg = tmp_path / "cfg.yaml"
+    _write_minimal_auto_cfg(cfg)
+    _patch_pipeline_and_input_info(monkeypatch, project_dir)
+    _auto_decision_stub(monkeypatch, source_lang="en", basis="detected:en-probe")
+
+    result = runner.invoke(
+        main,
+        [
+            "auto", str(video),
+            "--project-dir", str(project_dir),
+            "--config", str(cfg),
+            "--yes",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "preflight: src=en tgt=zh" in result.output
+    state = load_state(project_dir)
+    assert state.input["source_lang"] == "en"
+    assert state.input["target_lang"] == "zh"
+    assert "route_basis=detected" in result.output
+    assert "en-probe" in result.output
+
+
+def test_dub_auto_detects_japanese_when_no_flag(runner, tmp_path, monkeypatch):
+    """With no flag, the detector's Japanese verdict becomes src=ja."""
+    video = tmp_path / "video.mp4"
+    video.write_bytes(b"fake")
+    project_dir = tmp_path / "proj"
+    cfg = tmp_path / "cfg.yaml"
+    _write_minimal_auto_cfg(cfg)
+    _patch_pipeline_and_input_info(monkeypatch, project_dir)
+    _auto_decision_stub(monkeypatch, source_lang="ja", basis="detected:ja-probe")
 
     result = runner.invoke(
         main,
@@ -646,27 +759,145 @@ def test_dub_auto_uses_config_default_source_lang_when_flag_missing(runner, tmp_
     assert "preflight: src=ja tgt=zh" in result.output
     state = load_state(project_dir)
     assert state.input["source_lang"] == "ja"
+    assert state.input["target_lang"] == "zh"
+    assert "route_basis=detected" in result.output
+    assert "ja-probe" in result.output
 
 
-def test_dub_auto_rejects_unsupported_source_lang(runner, tmp_path):
+def test_dub_auto_fails_when_detection_is_ambiguous(runner, tmp_path, monkeypatch):
+    """Ambiguous detection must fail fast with re-run guidance.
+
+    The operator-facing message should mention the supported routes and
+    tell them to re-run with `--source-lang en|ja`. We accept a couple of
+    stable phrasings so T3 has room to choose exact wording.
+    """
+    from dub.cli import AutoRouteDecision  # type: ignore[attr-defined]
+
     video = tmp_path / "video.mp4"
     video.write_bytes(b"fake")
+    project_dir = tmp_path / "proj"
     cfg = tmp_path / "cfg.yaml"
-    cfg.write_text(
-        "defaults:\n"
-        "  source_lang: fr\n"
-        "paths:\n"
-        "  qwenasr_cli: /bin/true\n"
-        "  omnivoice_python: /bin/true\n"
-        "  skills_dir: /tmp/vendor/pipeline_scripts\n"
-        "  translation_skill: /bin/true\n",
-        encoding="utf-8",
+    _write_minimal_auto_cfg(cfg)
+    _patch_pipeline_and_input_info(monkeypatch, project_dir)
+
+    def ambiguous_stub(video, cfg):
+        # `source_lang=None` with a sentinel basis marks the detection as
+        # not confidently reducible to en/ja; the CLI layer turns this into
+        # an early UserError before any stage work starts.
+        return AutoRouteDecision(source_lang=None, basis="ambiguous:low-confidence")
+
+    monkeypatch.setattr("dub.cli._detect_auto_source_lang", ambiguous_stub)
+    # Pipeline must NOT be reached on ambiguous detection.
+    pipeline_called = {"value": False}
+
+    def fail_if_called(*args, **kwargs):
+        pipeline_called["value"] = True
+        return {"ok": True}
+
+    monkeypatch.setattr("dub.cli.run_pipeline", fail_if_called)
+
+    result = runner.invoke(
+        main,
+        [
+            "auto", str(video),
+            "--project-dir", str(project_dir),
+            "--config", str(cfg),
+            "--yes",
+        ],
     )
 
-    result = runner.invoke(main, ["auto", str(video), "--config", str(cfg)])
+    assert result.exit_code != 0, result.output
+    assert pipeline_called["value"] is False, "pipeline must not run on ambiguous detection"
+    out = result.output
+    # The new contract must mention both supported routes and the re-run
+    # instruction. T1's recommended stable phrasing is the canonical
+    # baseline; alternate wording that satisfies both constraints is OK.
+    assert "en" in out and "ja" in out
+    assert "--source-lang" in out
 
-    assert result.exit_code != 0
-    assert "dub auto requires source language en or ja" in result.output
+
+def test_dub_auto_fails_when_detection_raises(runner, tmp_path, monkeypatch):
+    """If the detector raises (e.g. probe error), CLI must fail fast.
+
+    Behaviourally equivalent to the ambiguous path: no pipeline work, no
+    silent fallback to `cfg.defaults.source_lang`.
+    """
+    video = tmp_path / "video.mp4"
+    video.write_bytes(b"fake")
+    project_dir = tmp_path / "proj"
+    cfg = tmp_path / "cfg.yaml"
+    _write_minimal_auto_cfg(cfg, with_defaults_source_lang=True)
+    _patch_pipeline_and_input_info(monkeypatch, project_dir)
+
+    def raise_stub(video, cfg):
+        raise RuntimeError("probe exploded")
+
+    monkeypatch.setattr("dub.cli._detect_auto_source_lang", raise_stub)
+
+    pipeline_called = {"value": False}
+
+    def fail_if_called(*args, **kwargs):
+        pipeline_called["value"] = True
+        return {"ok": True}
+
+    monkeypatch.setattr("dub.cli.run_pipeline", fail_if_called)
+
+    result = runner.invoke(
+        main,
+        [
+            "auto", str(video),
+            "--project-dir", str(project_dir),
+            "--config", str(cfg),
+            "--yes",
+        ],
+    )
+
+    assert result.exit_code != 0, result.output
+    assert pipeline_called["value"] is False
+    # Must not have silently fallen back to the config default of "ja".
+    assert "preflight: src=ja tgt=zh" not in result.output
+
+
+def test_dub_auto_preflight_includes_route_basis_and_project_dir(runner, tmp_path, monkeypatch):
+    """Preflight / completion output must surface chosen route + project dir.
+
+    The preflight line is the canonical operator-visible evidence that
+    `dub auto` chose the right route. The completion line and the
+    `route_basis=` token give the operator enough context to audit the
+    decision without re-running with --debug.
+    """
+    video = tmp_path / "video.mp4"
+    video.write_bytes(b"fake")
+    project_dir = tmp_path / "proj"
+    cfg = tmp_path / "cfg.yaml"
+    _write_minimal_auto_cfg(cfg)
+    _patch_pipeline_and_input_info(monkeypatch, project_dir)
+    _auto_decision_stub(monkeypatch, source_lang="en", basis="detected:en-asr-head")
+
+    result = runner.invoke(
+        main,
+        [
+            "auto", str(video),
+            "--project-dir", str(project_dir),
+            "--config", str(cfg),
+            "--yes",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    out = result.output
+    # Preflight carries chosen route + project.
+    preflight_lines = [line for line in out.splitlines() if line.startswith("preflight:")]
+    assert len(preflight_lines) == 1
+    preflight = preflight_lines[0]
+    assert "src=en" in preflight
+    assert "tgt=zh" in preflight
+    assert f"project={project_dir}" in preflight
+    # Operator-visible route basis token.
+    assert "route_basis=detected:en-asr-head" in preflight
+    # Completion line keeps the project dir too so the operator can paste it
+    # into the next `dub resume` invocation.
+    assert f"project={project_dir}" in out
 
 
 def test_dub_resume_restores_source_lang_from_state(runner, tmp_path, monkeypatch):
