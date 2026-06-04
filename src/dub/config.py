@@ -18,6 +18,7 @@ class PathsConfig(BaseModel):
     # configs. Operators no longer need to set it.
     qwenasr_cli: Path | None = None
     omnivoice_python: Path = Path("python3")
+    voxcpme_python: Path = Path("python3")
     skills_dir: Path = Path(__file__).resolve().parents[2] / "vendor" / "pipeline_scripts"
     # Legacy only: historical Hermes subtitle-translation script path.
     # Standalone CLI translation now uses `translation.provider/model`.
@@ -118,6 +119,7 @@ class DubConfig(BaseModel):
 
 DEFAULT_PATHS = {
     "omnivoice_python": "python3",
+    "voxcpme_python": "python3",
     "skills_dir": str(Path(__file__).resolve().parents[2] / "vendor" / "pipeline_scripts"),
     "translation_skill": str(Path(__file__).resolve().parents[2] / "src" / "dub" / "translator_gemini.py"),
     "dub_root": str(Path.home() / "video-dub-cli-runs"),

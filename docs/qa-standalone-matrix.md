@@ -84,7 +84,7 @@ I simulated a fresh clone by copying the source tree to
 | 4.3 | Bootstrap text names the API key env vars | grep output | **PASS** — line 3: `bootstrap: copy \`.env.example\` to your shell env setup and export GOOGLE_API_KEY (or GEMINI_API_KEY) before Gemini translation` | |
 | 4.4 | Bootstrap text says repo-owned wrapper scripts need no extra path config | grep output | **PASS** — line 4: `repo-owned pipeline scripts live under vendor/pipeline_scripts; no extra path config is required` | |
 | 4.5 | Bootstrap text describes the OmniVoice route truthfully | grep output | **PASS** — line 5 says OmniVoice uses the configured Python interpreter (default: `python3`) with required packages installed | |
-| 4.6 | Bootstrap text names the VoxCPM route's deps | grep output | **PASS** — line 6: `VoxCPM route expects the dub venv to include gradio_client + opencc, and a local VoxCPM server on 127.0.0.1:8808` | |
+| 4.6 | Bootstrap text names the VoxCPM route's deps | grep output | **PASS** — bootstrap 說明已改為：VoxCPM 可走 `dub bootstrap-voxcpm` 建立獨立 interpreter，且在 service gate 缺失時仍需本機 `127.0.0.1:8808` 服務 | |
 | 4.7 | Bootstrap text says the only required external secret is the Gemini API key | grep output | **PASS** — line 7 names `GOOGLE_API_KEY / GEMINI_API_KEY` | |
 | 4.8 | Bootstrap text does NOT tell operators to clone any external repo | grep output | **PASS** — no mention of `git clone`, `qwenasr-mlx-cli`, or `OmniVoice` source repos | Standalone contract honored |
 

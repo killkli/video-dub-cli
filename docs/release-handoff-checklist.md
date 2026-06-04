@@ -100,7 +100,7 @@ video-dub-cli 目前已具備 operator-grade single-command workflow。
 已驗證的支援情境包括 delegate / use-existing / existing-project skip。
 state / validate / integration coverage 已對齊。
 `uv sync --extra all` + `dub doctor` 已是 real-backend productization surface：
-real ASR / Gemini / OmniVoice / VoxCPM 所需依賴皆已收斂，`dub doctor` 會自動從
+real ASR / Gemini 與標準 VoxCPM route 所需依賴已收斂；OmniVoice 與獨立 VoxCPM interpreter 則透過 `dub bootstrap-omnivoice` / `dub bootstrap-voxcpm` 建立。`dub doctor` 會自動從
 `~/.zshrc` 復原 Gemini key，並逐 gate 報告每一個 readiness 狀態。
 `dub en2zh` / `dub ja2zh` 已有真實片源 end-to-end QA 紀錄。
 ```

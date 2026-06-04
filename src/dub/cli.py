@@ -581,9 +581,45 @@ def bootstrap():
     click.echo("bootstrap: OmniVoice route uses the configured Python interpreter (default: python3) with required packages installed")
     click.echo("bootstrap: OmniVoice model code is vendored in this repo; install its runtime deps in the configured OmniVoice interpreter with `uv sync --extra tts-omnivoice`")
     click.echo("bootstrap: or run `dub bootstrap-omnivoice` to create a dedicated interpreter and wire paths.omnivoice_python automatically")
-    click.echo("bootstrap: VoxCPM route expects the dub venv to include gradio_client + opencc, and a local VoxCPM server on 127.0.0.1:8808")
+    click.echo("bootstrap: VoxCPM route also uses a dedicated Python interpreter when fully productized")
+    click.echo("bootstrap: run `dub bootstrap-voxcpm` to create a dedicated interpreter and wire paths.voxcpme_python automatically")
+    click.echo("bootstrap: VoxCPM still requires a local server on 127.0.0.1:8808 until the repo-owned server entrypoint is fully wired")
     click.echo("bootstrap: the only required external secret is GOOGLE_API_KEY / GEMINI_API_KEY")
     click.echo("bootstrap: run `dub doctor` to verify every gate before your first real run")
+
+
+def _bootstrap_backend_venv(*, backend_name: str, extra_name: str, path_key: str, venv_path: Path, config_path: Path) -> Path:
+    repo_root = Path(__file__).resolve().parents[2]
+    uv_bin = shutil.which("uv")
+    if not uv_bin:
+        raise click.ClickException(f"bootstrap-{backend_name} requires `uv` on PATH")
+
+    venv_path = venv_path.expanduser().resolve()
+    config_path = config_path.expanduser().resolve()
+
+    click.echo(f"bootstrap-{backend_name}: repo={repo_root}")
+    click.echo(f"bootstrap-{backend_name}: target_venv={venv_path}")
+    click.echo(f"bootstrap-{backend_name}: config={config_path}")
+
+    subprocess.run([uv_bin, "venv", str(venv_path)], check=True, cwd=str(repo_root))
+    py = _venv_python(venv_path)
+    if not py.exists():
+        raise click.ClickException(f"bootstrap-{backend_name} created no python at {py}")
+
+    subprocess.run(
+        [uv_bin, "pip", "install", "--python", str(py), "-e", f".[{extra_name}]"],
+        check=True,
+        cwd=str(repo_root),
+    )
+
+    data = _load_yaml_dict(config_path)
+    paths = data.get("paths") or {}
+    if not isinstance(paths, dict):
+        raise UserError(f"config paths section must be a YAML mapping: {config_path}")
+    paths[path_key] = str(py)
+    data["paths"] = paths
+    _write_yaml_dict(config_path, data)
+    return py
 
 
 @main.command(name="bootstrap-omnivoice")
@@ -603,37 +639,45 @@ def bootstrap():
 )
 def bootstrap_omnivoice(venv_path, config_path):
     """Create/update a dedicated OmniVoice venv and wire config automatically."""
-    repo_root = Path(__file__).resolve().parents[2]
-    uv_bin = shutil.which("uv")
-    if not uv_bin:
-        raise click.ClickException("bootstrap-omnivoice requires `uv` on PATH")
-
-    venv_path = venv_path.expanduser().resolve()
     config_path = (config_path or _default_operator_config_path()).expanduser().resolve()
-
-    click.echo(f"bootstrap-omnivoice: repo={repo_root}")
-    click.echo(f"bootstrap-omnivoice: target_venv={venv_path}")
-    click.echo(f"bootstrap-omnivoice: config={config_path}")
-
-    subprocess.run([uv_bin, "venv", str(venv_path)], check=True, cwd=str(repo_root))
-    py = _venv_python(venv_path)
-    if not py.exists():
-        raise click.ClickException(f"bootstrap-omnivoice created no python at {py}")
-
-    subprocess.run(
-        [uv_bin, "pip", "install", "--python", str(py), "-e", ".[tts-omnivoice]"],
-        check=True,
-        cwd=str(repo_root),
+    py = _bootstrap_backend_venv(
+        backend_name="omnivoice",
+        extra_name="tts-omnivoice",
+        path_key="omnivoice_python",
+        venv_path=venv_path,
+        config_path=config_path,
     )
-
-    data = _load_yaml_dict(config_path)
-    paths = data.get("paths") or {}
-    if not isinstance(paths, dict):
-        raise UserError(f"config paths section must be a YAML mapping: {config_path}")
-    paths["omnivoice_python"] = str(py)
-    data["paths"] = paths
-    _write_yaml_dict(config_path, data)
-
     click.echo(f"bootstrap-omnivoice: installed video-dub-cli[tts-omnivoice] into {venv_path}")
     click.echo(f"bootstrap-omnivoice: wrote paths.omnivoice_python={py} into {config_path}")
     click.echo(f"bootstrap-omnivoice: next run `uv run dub doctor --config {config_path}`")
+
+
+@main.command(name="bootstrap-voxcpm")
+@click.option(
+    "--venv-path",
+    type=click.Path(path_type=Path),
+    default=Path(".venvs") / "voxcpm",
+    show_default=True,
+    help="Target virtualenv directory for the dedicated VoxCPM interpreter.",
+)
+@click.option(
+    "--config",
+    "config_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="YAML config file to update with paths.voxcpme_python (default: ~/.config/dub/config.yaml).",
+)
+def bootstrap_voxcpm(venv_path, config_path):
+    """Create/update a dedicated VoxCPM venv and wire config automatically."""
+    config_path = (config_path or _default_operator_config_path()).expanduser().resolve()
+    py = _bootstrap_backend_venv(
+        backend_name="voxcpm",
+        extra_name="tts-vox",
+        path_key="voxcpme_python",
+        venv_path=venv_path,
+        config_path=config_path,
+    )
+    click.echo(f"bootstrap-voxcpm: installed video-dub-cli[tts-vox] into {venv_path}")
+    click.echo(f"bootstrap-voxcpm: wrote paths.voxcpme_python={py} into {config_path}")
+    click.echo("bootstrap-voxcpm: note the local server still needs to be started separately until the repo-owned server entrypoint lands")
+    click.echo(f"bootstrap-voxcpm: next run `uv run dub doctor --config {config_path}`")

@@ -41,6 +41,7 @@ def test_voxcpme_route_uses_repo_owned_runtime_scripts(tmp_path):
     cfg = DubConfig()
     cfg.paths.skills_dir = tmp_path / "legacy-skills"
     cfg.paths.tts_engines_dir = tmp_path / "repo-tts"
+    cfg.paths.voxcpme_python = Path("/usr/bin/python3")
 
     route = build_voxcpme_route(cfg, source_lang="ja")
 
@@ -50,3 +51,4 @@ def test_voxcpme_route_uses_repo_owned_runtime_scripts(tmp_path):
     assert route.source_srt_flag == "--ja-srt"
     assert route.needs_project_dir is True
     assert route.backend_name == "voxcpme"
+    assert route.interpreter == Path("/usr/bin/python3")

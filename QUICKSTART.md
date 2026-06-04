@@ -6,6 +6,7 @@
 
 1. **標準路線**：`uv sync --extra all` → `dub doctor` → `dub en2zh` / `dub ja2zh`
 2. **OmniVoice 路線**：在標準路線之外，再執行 `dub bootstrap-omnivoice`
+3. **獨立 VoxCPM interpreter 路線**：在標準路線之外，可執行 `dub bootstrap-voxcpm`
 
 ---
 
@@ -39,7 +40,7 @@ uv sync --extra all
 - `dub` CLI
 - 本地 ASR 依賴
 - Gemini 翻譯依賴
-- VoxCPM client 依賴
+- 標準 VoxCPM route 依賴（`gradio_client` / `opencc`）
 
 ---
 

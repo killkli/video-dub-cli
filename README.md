@@ -33,7 +33,8 @@ uv run dub en2zh talk.mp4
 ### 仍屬外部前置條件
 - `ffmpeg` / `ffprobe`
 - Gemini API key
-- VoxCPM 本機服務（若要走 VoxCPM）
+- VoxCPM 路線：`uv sync --extra all` 可直接提供標準 `ja2zh` operator 路線；若要獨立 VoxCPM interpreter，可跑 `dub bootstrap-voxcpm`
+- 若 `dub doctor` 顯示 `service` 缺失，仍需啟動本機 VoxCPM 服務（預設 `127.0.0.1:8808`）
 - OmniVoice 專用 Python 環境（若要走 OmniVoice；可由 `dub bootstrap-omnivoice` 自動建立）
 
 ---
@@ -58,7 +59,7 @@ uv sync --extra all
 - `dub` CLI
 - 本地 ASR 依賴
 - Gemini 翻譯依賴
-- VoxCPM client 依賴
+- 標準 VoxCPM route 依賴（`gradio_client` / `opencc`）
 
 ### 3. 安裝系統工具
 
@@ -239,6 +240,7 @@ uv run dub resume --project-dir /path/to/project
 - 複製範例設定檔
 - 設定 API key
 - 需要 OmniVoice 時再跑 `dub bootstrap-omnivoice`
+- 需要獨立 VoxCPM interpreter 時可跑 `dub bootstrap-voxcpm`
 
 推薦起點：
 
@@ -272,6 +274,7 @@ uv run dub bootstrap-omnivoice --config ~/.config/dub/config.yaml
 - `uv run dub doctor`
 - `uv run dub bootstrap`
 - `uv run dub bootstrap-omnivoice`
+- `uv run dub bootstrap-voxcpm`
 - `uv run dub en2zh ...`
 - `uv run dub ja2zh ...`
 - `dub resume / status / validate / clean`

@@ -79,8 +79,31 @@ tts-omnivoice = [
 # second Python interpreter to worry about — VoxCPM runs as a
 # gradio server, and the dub venv just needs the client libs.
 tts-vox = [
-    "gradio_client>=0.16.0",
+    "torch>=2.5.0",
+    "torchaudio>=2.5.0",
+    "torchcodec",
+    "transformers>=4.36.2",
+    "einops",
+    "gradio[mcp]>=6,<7",
+    "inflect",
+    "addict",
+    "wetext",
+    "modelscope>=1.22.0",
+    "datasets>=3,<4",
+    "huggingface-hub",
+    "pydantic",
+    "tqdm",
+    "simplejson",
+    "sortedcontainers",
+    "soundfile",
+    "librosa",
+    "matplotlib",
+    "funasr",
+    "spaces",
+    "argbind",
+    "safetensors",
     "opencc-python-reimplemented>=0.1.7",
+    "gradio_client>=0.16.0",
 ]
 
 # ASR / audio stack (qwen-asr MLX). Pulls in numpy / torch-free paths.
@@ -146,11 +169,13 @@ dub-bootstrap = "dub.bootstrap:main"
 conflicts = [
     [{ extra = "all" }, { extra = "tts-omnivoice" }],
     [{ extra = "asr" }, { extra = "tts-omnivoice" }],
+    [{ extra = "all" }, { extra = "tts-vox" }],
+    [{ extra = "asr" }, { extra = "tts-vox" }],
 ]
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["dub*", "qwenasr_mlx_cli*", "omnivoice*"]
+include = ["dub*", "qwenasr_mlx_cli*", "omnivoice*", "voxcpm*"]
 
 [tool.setuptools.package-data]
 dub = ["py.typed"]

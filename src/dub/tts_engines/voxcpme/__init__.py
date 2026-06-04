@@ -75,10 +75,12 @@ def build_route(config: DubConfig, source_lang: str = "ja") -> ResolvedRoute:
     # voxcpme/runner.py. The runner itself forwards argv to the
     # vendored heavy-lift script under vendor/pipeline_scripts/.
     script_path = engines_dir(config) / route.script_name
-    # VoxCPM has no separate-interpreter requirement; it runs in the
-    # dub venv (where gradio_client + opencc are installed via extras).
+    # VoxCPM now follows the same dedicated-interpreter pattern as
+    # OmniVoice. When operators bootstrap a standalone VoxCPM runtime,
+    # paths.voxcpme_python points at that venv; otherwise we fall back to
+    # the dub venv for backward compatibility.
     interpreter = diag.resolve_interpreter(
-        backend_preferred=None,
+        backend_preferred=config.paths.voxcpme_python,
         dub_executable=Path(sys.executable),
     )
     return ResolvedRoute(
@@ -95,9 +97,9 @@ def readiness(config: DubConfig, *, service_host: str = "127.0.0.1",
     """Probe VoxCPM readiness. Five gates:
 
     1. wrapper — the package runner exists in the engines dir
-    2. interpreter — the dub venv interpreter exists
-    3. deps:gradio_client — gradio_client is importable
-    4. deps:opencc — opencc is importable
+    2. interpreter — the configured VoxCPM interpreter exists
+    3. deps:gradio_client — gradio_client is importable there
+    4. deps:opencc — opencc is importable there
     5. service — the local gradio server is reachable
     """
     checks: list[tuple[str, str, str]] = []
@@ -112,18 +114,22 @@ def readiness(config: DubConfig, *, service_host: str = "127.0.0.1",
     script_path = engines_dir(config) / route.script_name
     checks.append(("wrapper", *diag.file_exists(script_path)))
 
-    interp = Path(sys.executable)
+    interp = diag.resolve_interpreter(
+        backend_preferred=config.paths.voxcpme_python,
+        dub_executable=Path(sys.executable),
+    )
     checks.append(("interpreter", "ok" if interp.exists() else "missing", str(interp)))
 
-    # VoxCPM deps belong in the dub venv (not a separate interpreter),
-    # so we probe under sys.executable — no subprocess needed.
-    checks.append(("deps:gradio_client", *diag.python_imports("gradio_client")))
-    checks.append(("deps:opencc", *diag.python_imports("opencc")))
+    # VoxCPM may now live in a dedicated interpreter. Probe the import
+    # gates under that interpreter explicitly so `dub doctor` reflects the
+    # runtime that stage 5 will actually call.
+    checks.append(("deps:gradio_client", *diag.python_imports("gradio_client", interpreter=interp)))
+    checks.append(("deps:opencc", *diag.python_imports("opencc", interpreter=interp)))
 
     # Service reachability is reported but does NOT block readiness by
     # default — operators may want to start VoxCPM after seeing the
     # doctor's report. We mark it "warn" rather than "missing" so the
-    # overall gate stays useful for "is the dub venv set up?".
+    # overall gate stays useful for "is the runtime set up?".
     status, detail = diag.tcp_connect(service_host, service_port)
     if status == "ok":
         checks.append(("service", "ok", detail))

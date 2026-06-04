@@ -307,7 +307,19 @@ omnivoice: READY
 uv run dub doctor
 ```
 
-看它缺的是：
+標準路線先確認：
+
+```bash
+uv sync --extra all
+```
+
+若你要把 VoxCPM 重依賴隔離到獨立 interpreter，再跑：
+
+```bash
+uv run dub bootstrap-voxcpm
+```
+
+看 doctor 缺的是：
 
 - `deps:gradio_client`
 - `deps:opencc`
