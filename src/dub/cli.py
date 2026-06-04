@@ -741,6 +741,15 @@ def auto(video, source_lang, project_dir, config_path, translate_mode, translate
     """
     try:
         cfg = load_config(config_path)
+        if source_lang is None:
+            # Wave 3 (T6): MLX ASR head-probe can run 60-115s with no
+            # output otherwise. One stderr line tells the operator the
+            # CLI is working and not hung. Preflight echoes the resolved
+            # route_basis on its own line right after.
+            click.echo(
+                "auto-detect: probing 30s audio head for source language...",
+                err=True,
+            )
         decision = _resolve_auto_route(video, source_lang, cfg)
     except UserError as exc:
         raise click.ClickException(str(exc)) from exc

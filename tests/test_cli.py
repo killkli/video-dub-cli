@@ -816,6 +816,91 @@ def test_dub_auto_fails_when_detection_is_ambiguous(runner, tmp_path, monkeypatc
     assert "--source-lang" in out
 
 
+def test_dub_auto_emits_probe_progress_line_on_no_flag_path(
+    runner, tmp_path, monkeypatch
+):
+    """When `--source-lang` is absent, `dub auto` must emit a stderr progress
+    line BEFORE the (potentially 60-115s) MLX ASR head-probe runs, so a
+    first-time operator sees the CLI is working and does not Ctrl-C assuming
+    it is hung.
+
+    The progress line must:
+      * appear on stderr (not stdout) — preflight stdout is reserved for
+        pipeline output
+      * appear before the preflight `route_basis=detected:...` line, so the
+        operator sees the "probing" announcement and then the resolved route
+      * NOT appear on the explicit `--source-lang` override path, where
+        no probe runs and the preflight line itself is the first signal
+    """
+    video = tmp_path / "video.mp4"
+    video.write_bytes(b"fake")
+    project_dir = tmp_path / "proj"
+    cfg = tmp_path / "cfg.yaml"
+    _write_minimal_auto_cfg(cfg)
+    _patch_pipeline_and_input_info(monkeypatch, project_dir)
+    _auto_decision_stub(monkeypatch, source_lang="en", basis="detected:en-probe")
+
+    result = runner.invoke(
+        main,
+        [
+            "auto", str(video),
+            "--project-dir", str(project_dir),
+            "--config", str(cfg),
+            "--yes",
+        ],
+    )
+
+    assert result.exit_code == 0, result.stdout
+    stderr = result.stderr
+    # Progress line wording is part of the contract: must announce the
+    # probe and the duration so an operator waiting on a long MLX
+    # transcription knows what is happening.
+    assert "auto-detect" in stderr
+    assert "probing" in stderr
+    assert "30s" in stderr
+    # The progress line is on stderr, not stdout (stdout is reserved for
+    # pipeline / preflight output). The source code emits it before
+    # _resolve_auto_route(), so the chronological ordering is enforced
+    # at the call site — not something the test needs to re-prove by
+    # scanning across streams.
+    assert "auto-detect" not in result.stdout
+    # Preflight itself still appears in stdout, not stderr.
+    assert "route_basis=detected" in result.stdout
+
+
+def test_dub_auto_does_not_emit_probe_progress_line_on_explicit_override(
+    runner, tmp_path, monkeypatch
+):
+    """Explicit `--source-lang` short-circuits the detector, so no probe
+    runs and the progress line must NOT appear (operator override path
+    starts with preflight, full stop)."""
+    video = tmp_path / "video.mp4"
+    video.write_bytes(b"fake")
+    project_dir = tmp_path / "proj"
+    cfg = tmp_path / "cfg.yaml"
+    _write_minimal_auto_cfg(cfg)
+    _patch_pipeline_and_input_info(monkeypatch, project_dir)
+    # Detector would have said "ja"; explicit override must force "en".
+    _auto_decision_stub(monkeypatch, source_lang="ja", basis="detected:should-be-ignored")
+
+    result = runner.invoke(
+        main,
+        [
+            "auto", str(video),
+            "--source-lang", "en",
+            "--project-dir", str(project_dir),
+            "--config", str(cfg),
+            "--yes",
+        ],
+    )
+
+    assert result.exit_code == 0, result.stdout
+    # No "probing" announcement on the override path — the detector never runs.
+    assert "probing" not in result.stderr
+    # Preflight still surfaces the explicit-override route_basis.
+    assert "route_basis=override" in result.stdout
+
+
 def test_dub_auto_fails_when_detection_raises(runner, tmp_path, monkeypatch):
     """If the detector raises (e.g. probe error), CLI must fail fast.
 
