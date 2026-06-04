@@ -1,217 +1,329 @@
-# video-dub-cli Auto Workflow Full Development Plan
+# Auto Workflow Full Development Plan
 
-> **For Hermes:** Use this as the canonical plan for the new workstream: input one video, then run the full EN/JA → ZH workflow end-to-end from a single CLI entrypoint with real operator-grade checkpoints.
+> **For Hermes:** this is the new execution contract for turning `video-dub-cli` from a route-aware operator CLI into a true one-video-in, Chinese-dub-out automatic workflow.
 
-**Goal:** turn `video-dub-cli` into a single-command workflow where an operator can pass a video file and have the pipeline automatically run the required downstream steps for English→Chinese or Japanese→Chinese conversion, with clear preflight checks, resumable state, and truthful backend gating.
+**Goal:** allow an operator to pass a single video to the CLI and have the workflow automatically determine whether the source is English or Japanese, choose the correct dubbing route, run the downstream pipeline end-to-end, and leave behind a truthful, resumable project tree with obvious recovery commands.
 
-**Architecture:** keep the existing staged pipeline, but add a higher-level orchestration layer that chooses route, validates prerequisites, creates/uses project state consistently, and drives the full workflow through one stable operator entrypoint. Do not collapse proven stage boundaries; productize them.
+**Architecture:** keep the existing staged pipeline (`stems → asr → ref_audio → translate → tts → assemble`) and existing explicit commands (`run`, `en2zh`, `ja2zh`, `resume`, `status`, `validate`, `doctor`) as the stable substrate. Productize a new top-layer automatic contract around them: route detection, common-path UX, recovery visibility, and operator-grade verification.
 
-**Tech Stack:** Python 3.11+, Click, Pydantic, pytest, existing `dub` stage runner, repo-owned qwenasr / translation / TTS adapters.
-
----
-
-## Grounded current state (verified this session)
-
-- Branch: `feature/standalone-repo-uv`
-- VoxCPM vendor commit completed: `fbe78d9`
-- `uv sync --extra all` works on fresh clone
-- `uv run dub --help` works on fresh clone
-- `uv run dub doctor` works on fresh clone
-- Fresh clone `dub doctor` reports:
-  - `voxcpme: READY`
-  - `omnivoice: BLOCKED` unless separate bootstrap is done
-- `dub bootstrap-voxcpm` works and writes `paths.voxcpme_python`
-- Current board: `video-dub-cli-auto-workflow`
-- Existing board state already covers early research / QA for first slice
+**Tech stack:** Python 3.11+, Click CLI, pytest, existing `ProjectState`, `dub doctor` / `resume` / `validate`, Gemini translation helper, QwenASR-based pipeline artifacts, repo-owned vendor scripts.
 
 ---
 
-## Product target
+## 1. Grounded baseline at plan start
 
-The supported operator stories should become:
+Verified in `/Users/johnchen/.hermes/projects/video-dub-cli` on branch `feature/auto-workflow-kanban` after Wave 2 fixes:
 
-1. `uv run dub en2zh <video>`
-   - automatic project setup
-   - ASR / translation / TTS / assemble / validate
-   - resumable if interrupted
+- Current branch: `feature/auto-workflow-kanban`
+- Baseline commit from previous wave: `35f271a`
+- Existing operator entrypoints already present:
+  - `dub auto <video>`
+  - `dub en2zh <video>`
+  - `dub ja2zh <video>`
+  - `dub run <video> --source-lang ... --target-lang ...`
+  - `dub resume --project-dir <dir>`
+  - `dub status --project-dir <dir>`
+  - `dub validate --project-dir <dir>`
+  - `dub doctor`
+- Current reality gap:
+  - `dub auto` is **not yet fully automatic** for the user request.
+  - It still relies on `--source-lang` or `defaults.source_lang`.
+  - Therefore the product contract is still “route-aware one-command workflow,” not “single video input, auto-choose EN/JA route, then run everything.”
 
-2. `uv run dub ja2zh <video>`
-   - same as above, but routed to Japanese → Chinese contract
-   - backend truthfulness surfaced by `dub doctor`
-
-3. `uv run dub auto <video>`
-   - new higher-level entrypoint
-   - source language explicitly provided or auto-selected from config/default
-   - chooses `en2zh` or `ja2zh` route without the operator having to remember lower-level mode details
-
----
-
-## Non-goals for this wave
-
-- no silent language auto-detection by ML unless already proven in repo
-- no removal of the current staged/resumable architecture
-- no fake success when TTS service/model is unavailable
-- no collapsing OmniVoice + VoxCPM into one dependency environment
+This new wave exists to close that gap truthfully.
 
 ---
 
-## Main gaps
+## 2. Product target
 
-### G1. No canonical top-level `auto` entrypoint
-Current CLI exposes route-specific commands, but not a single productized entrypoint for operators who just want “take this video and convert it”.
+The target operator experience is:
 
-### G2. Preflight is still fragmented
-The operator can reach stage execution before all route-specific requirements are summarized in one place.
+```bash
+uv run dub auto /path/to/video.mp4
+```
 
-### G3. Project bootstrap is not yet framed as one coherent workflow contract
-The code is resumable, but the operator story still feels like several expert commands instead of one obvious workflow.
+Expected behavior:
 
-### G4. Documentation and QA are not yet aligned to the final operator mental model
-Docs mention pieces, but the user wants a direct CLI workflow with a complete development plan and implementation lane.
+1. CLI inspects the input and determines the likely source route (`en` or `ja`) automatically.
+2. CLI prints the chosen route and project directory before expensive stage work starts.
+3. CLI runs the existing downstream pipeline without requiring the operator to think about route selection.
+4. CLI ends with a clear summary:
+   - chosen route
+   - project directory
+   - final artifact path
+   - recovery commands (`resume`, `status`, `validate`)
+5. Explicit controls (`--source-lang`, `en2zh`, `ja2zh`, `run`) remain available as escape hatches.
 
----
-
-## Phase plan
-
-## Phase 0 — Freeze current truth and establish branch/board guardrails
-**Outcome:** new work proceeds on top of a verified baseline and does not mix with unrelated standalone-TTS work.
-
-Tasks:
-1. Record current verified contract in docs/plans and board comments.
-2. Keep `feature/standalone-repo-uv` as the active integration branch unless a new feature branch is explicitly cut.
-3. Treat `video-dub-cli-auto-workflow` as the canonical board for this wave.
-
-## Phase 1 — Introduce canonical `dub auto` entrypoint
-**Outcome:** one stable command exists for the operator.
-
-Tasks:
-1. Add `dub auto <video>` command.
-2. Accept source language from explicit flag/config/defaults.
-3. Resolve to `en2zh` or `ja2zh` route deterministically.
-4. Print a short route summary before stage execution.
-5. Add focused CLI tests.
-
-## Phase 2 — Preflight + workflow contract hardening
-**Outcome:** wrong invocations fail before expensive work begins.
-
-Tasks:
-1. Centralize route-specific preflight checks.
-2. Fail fast on missing API key / ffmpeg / TTS route prerequisites.
-3. Make `dub auto` and route-specific commands share the same preflight contract.
-4. Add tests for failure and success paths.
-
-## Phase 3 — Project bootstrap + state coherence
-**Outcome:** input video → stable project state creation is fully coherent.
-
-Tasks:
-1. Ensure `auto` creates or reuses project dir consistently.
-2. Ensure resume/status/validate still work unchanged.
-3. Verify artifacts are registered in `ProjectState` at each stage boundary.
-4. Add regression tests for new-project and resume flows.
-
-## Phase 4 — Operator-facing docs and examples
-**Outcome:** docs match the real supported workflow.
-
-Tasks:
-1. Update README with `dub auto` as the primary story.
-2. Keep `en2zh` / `ja2zh` documented as explicit lower-level aliases.
-3. Add examples for English, Japanese, resume, and route-specific bootstrap.
-4. Update runbook / QA matrix / handoff checklist.
-
-## Phase 5 — Real workflow QA gate
-**Outcome:** the new entrypoint is proven on supported scenarios.
-
-Tasks:
-1. Fresh clone + `uv sync --extra all` + `dub auto` smoke path.
-2. English route smoke.
-3. Japanese route smoke.
-4. Resume / validate / status smoke.
-5. Confirm failure messaging remains truthful when backend is blocked.
+Non-goal: broad multilingual detection beyond English/Japanese.
 
 ---
 
-## Task graph for implementation
+## 3. Scope of this wave
 
-### Lane A — CLI surface
-- add `dub auto`
-- route resolution
-- summary output
-- tests
+### In scope
 
-### Lane B — Preflight contract
-- unify backend prerequisite checks
-- route-specific fail-fast
-- tests
+1. Define a truthful **auto route detection contract** for EN vs JA.
+2. Implement a preflight route detector used by `dub auto`.
+3. Ensure the detector fails loudly and explainably when confidence is too low.
+4. Preserve explicit route commands and advanced controls.
+5. Add tests for route detection, fallback, and operator messaging.
+6. Verify end-to-end behavior with operator-grade commands.
+7. Update README / QUICKSTART / runbook only after runtime truth is verified.
 
-### Lane C — Docs and operator contract
+### Out of scope
+
+1. Arbitrary multilingual routing beyond `en` / `ja`.
+2. Replacing the existing stage architecture.
+3. Changing TTS backend strategy (OmniVoice for EN source, VoxCPM for JA source).
+4. General-purpose speech-language detection service integration unless needed by the narrow contract.
+
+---
+
+## 4. Deliverables
+
+### D1. Automatic route detection for `dub auto`
+
+`dub auto <video>` no longer requires the user to know or provide source language for normal EN/JA use.
+
+Acceptance truth:
+- if the source is clearly English, `dub auto` resolves to EN→ZH
+- if the source is clearly Japanese, `dub auto` resolves to JA→ZH
+- if confidence is ambiguous, CLI aborts early with a precise instruction to re-run with `--source-lang en|ja`
+
+### D2. Operator-visible preflight contract
+
+Before stage work starts, CLI prints:
+- chosen route
+- reason or detection basis
+- project directory
+- translate mode
+
+Acceptance truth:
+- the operator can understand what `dub auto` decided without opening source or config
+
+### D3. Recovery-visible completion contract
+
+After success, CLI prints:
+- source route used
+- project directory
+- final artifact path
+- `resume`, `status`, `validate` hints
+
+Acceptance truth:
+- the operator knows where to look next after either success or interruption
+
+### D4. Regression coverage
+
+Tests must cover:
+- explicit override still wins (`--source-lang`)
+- auto detection chooses `en` when detector says English
+- auto detection chooses `ja` when detector says Japanese
+- ambiguous detection fails early with clear operator message
+- help/docs stay truthful
+
+### D5. Docs aligned to runtime truth
+
+Only after code + tests + smoke verification pass:
 - README
-- QUICKSTART
-- runbook
-- QA matrix / release checklist
-
-### Lane D — QA / verification
-- fresh clone validation
-- route smoke tests
-- resume/status/validate checks
-
-Dependencies:
-- Lane A and B can start in parallel
-- Lane C depends on A+B shape settling
-- Lane D depends on A+B, and partially on C for final wording verification
+- QUICKSTART / operator docs
+- any help-text or plan docs that describe `dub auto`
 
 ---
 
-## Verification commands
+## 5. Proposed implementation strategy
+
+### Phase A — Detection contract design
+
+Research the narrowest implementation that fits the current codebase with minimal blast radius.
+
+Likely design:
+1. Add a small route-detection helper near CLI/preflight code.
+2. For `dub auto`, if `--source-lang` is provided, use it directly.
+3. Else, run a lightweight detection step on the input video (or an extracted short sample / ASR snippet path if already cheap enough).
+4. Map result to `en` or `ja` with a confidence threshold.
+5. If unsupported or ambiguous, stop before stage 1 with an explicit error.
+
+### Phase B — Wire `dub auto`
+
+Update `dub auto` so its source-route resolution order becomes:
+1. explicit `--source-lang`
+2. auto detector
+3. fail with instruction
+
+Do **not** silently fall back to config defaults in the new automatic contract unless the user explicitly wants a pinned default route.
+
+### Phase C — UX tightening
+
+Preflight and completion output must always expose:
+- route
+- project dir
+- output path / expected output path
+- recovery commands
+
+### Phase D — Verification
+
+1. unit / CLI regression tests
+2. targeted operator QA commands
+3. if feasible, one hermetic smoke route with fake seams
+4. doc updates after runtime truth is proven
+
+---
+
+## 6. Task graph (Kanban-ready)
+
+### T0 — Baseline freeze and branch gate
+**Status:** already completed in this session
+
+Outputs:
+- feature branch created: `feature/auto-workflow-kanban`
+- prior Wave 2 fixes preserved
+- new wave baseline captured in this plan
+
+### T1 — Research: auto route detection contract
+**Purpose:** inspect current `dub auto` resolution path and propose the narrowest truthful EN/JA detection design.
+
+Must answer:
+- where route detection should live
+- whether to use lightweight probe / sample ASR / another helper
+- what “ambiguous” means operationally
+- what exact operator-visible message should appear
+
+### T2 — Dev: add failing tests for auto route detection contract
+**Purpose:** encode the new product contract before implementation.
+
+Expected coverage:
+- explicit override precedence
+- auto English detection
+- auto Japanese detection
+- ambiguous detection failure
+- operator-visible preflight summary contains route + project dir
+
+### T3 — Dev: implement route detector + wire `dub auto`
+**Purpose:** make `dub auto` actually automatic for EN/JA route selection.
+
+Likely files:
+- `src/dub/cli.py`
+- possibly new helper module if extraction improves clarity
+- `tests/test_cli.py`
+
+**T3 outcome (recorded by T3 implementer, 2026-06-04):**
+
+Land status on `feature/auto-workflow-kanban`:
+
+- Commits added by T3:
+  - `6e5b4ce` — `feat(cli): add AutoRouteDecision seam + precedence resolver [T3.1]`
+  - `0af1deb` — `feat(cli): wire dub auto to precedence resolver + route_basis preflight [T3.2]`
+- Verification (run on T3 implementer's machine):
+  - `uv run --no-sync pytest tests/test_cli.py -k 'auto' -v` → **11/11 pass** (was 5/11 RED on T2 baseline; the 6 new T2 contract tests all flipped green in T3.2)
+  - `uv run --no-sync pytest tests/test_cli.py` → **68/68 pass**, no regressions
+  - `uv run --no-sync dub auto --help` → shows the new wave-3 precedence and re-run guidance
+- What ships:
+  - `AutoRouteDecision(source_lang, basis)` frozen dataclass on `dub.cli`
+  - `_detect_auto_source_lang(video, cfg) -> AutoRouteDecision` real implementation (30s audio head-probe via ffmpeg + repo ASR + script-level classifier). Lazily imports `qwenasr_mlx_cli` so `en2zh` / `ja2zh` / `run` callers don't pay the cost.
+  - `_resolve_auto_route(video, source_lang, cfg)` precedence wrapper: explicit `--source-lang` > detector > early `UserError`
+  - `_normalize_explicit_source_lang` rejects unsupported explicit values with the new "Re-run with --source-lang en|ja" wording
+  - `_run_preflight` and `_run_pipeline_command` accept an optional `route_basis` parameter; when set, the preflight line ends with ` route_basis=<basis>`. `en2zh` / `ja2zh` / `run` never pass one, so their preflight line shape is byte-identical to the pre-wave-3 contract.
+  - `dub auto` body rewired: on `AutoRouteDecision.source_lang is None` it raises `click.ClickException` with `(basis: ...; supported: en, ja). Re-run with --source-lang en|ja.` — does NOT fall back to `cfg.defaults.source_lang`.
+  - `dub auto --help` and command docstring updated to describe the auto-detect path. `en2zh` / `ja2zh` / `run` docstrings untouched.
+- Old `_resolve_auto_source_lang(source_lang, cfg) -> str` removed (only consumer was the `auto` command; the new resolver replaces it).
+
+T3 handoff to T4 (operator contract verification):
+- The 6 new T2 contract tests (`test_dub_auto_explicit_source_lang_overrides_detector`, `test_dub_auto_detects_english_when_no_flag`, `test_dub_auto_detects_japanese_when_no_flag`, `test_dub_auto_fails_when_detection_is_ambiguous`, `test_dub_auto_fails_when_detection_raises`, `test_dub_auto_preflight_includes_route_basis_and_project_dir`) are the authoritative spec. T4 should treat them as the source of truth.
+- For real-video manual smoke testing, T4 will need `ffmpeg` on `$PATH` AND the qwenasr_mlx_cli ASR backend installed (`uv sync --extra all` already covers this) AND a real video file. The repo's hermetic test suite does NOT exercise the real detector — it always monkeypatches `_detect_auto_source_lang`. T4's job is to close that gap with at least one end-to-end run.
+
+### T4 — QA: operator contract verification
+**Purpose:** verify that `dub auto` now behaves like a true one-video-in operator command instead of a route-aware wrapper.
+
+Checks:
+- no route flag needed on common path
+- explicit route override still works
+- ambiguous case blocks early with correct message
+- completion / recovery summary remains truthful
+
+### T5 — Docs: update operator-facing contract
+**Purpose:** change docs only after T4 verifies runtime truth.
+
+Likely files:
+- `README.md`
+- `QUICKSTART.md`
+- any operator runbook mentioning `dub auto`
+
+---
+
+## 7. Execution rules
+
+1. Keep existing explicit commands intact; `dub auto` is additive productization, not a breaking removal.
+2. Every claim must be backed by real command output or test output.
+3. Keep commits logically minimal.
+4. Do not claim multilingual auto support beyond EN/JA.
+5. If detection quality is insufficient, fail early and truthfully rather than silently guessing.
+
+---
+
+## 8. First implementation slice for this session
+
+The first concrete slice to start immediately is:
+
+### Slice S1 — establish the detection seam and failing tests
+
+Why this slice first:
+- it turns the user request into an executable contract
+- it minimizes architecture guesswork
+- it gives a stable target before touching runtime behavior
+
+Expected work in S1:
+1. inspect current `_resolve_auto_source_lang(...)` path
+2. identify best seam for injectable detection helper
+3. add failing tests that express the new behavior
+4. implement only enough scaffolding to make the contract explicit
+
+This is the first card to execute now.
+
+---
+
+## 9. Verification commands
+
+Baseline:
 
 ```bash
-pytest -q tests/test_cli.py tests/test_tts_engines.py tests/test_tts_runner_entrypoints.py
-pytest -q
-uv run dub --help
-uv run dub doctor
-uv run dub auto --help
+git branch --show-current
+git status --short
+git rev-parse --short HEAD
 ```
 
-Fresh clone verification:
+CLI surface:
 
 ```bash
-git clone <repo> /tmp/video-dub-cli-fresh
-cd /tmp/video-dub-cli-fresh
-uv sync --extra all
 uv run dub --help
-uv run dub doctor
 uv run dub auto --help
+uv run dub en2zh --help
+uv run dub ja2zh --help
+```
+
+Targeted tests:
+
+```bash
+uv run pytest tests/test_cli.py -q
+```
+
+Post-change operator QA:
+
+```bash
+uv run dub doctor
+uv run dub auto <video>
+uv run dub status --project-dir <dir>
+uv run dub validate --project-dir <dir>
 ```
 
 ---
 
-## Commit plan
+## 10. Completion criteria for this wave
 
-### Commit A
-- add canonical `dub auto` command and route resolution
-- message: `feat(cli): add canonical auto workflow entrypoint [AUTO-S1]`
+This wave is complete only if all are true:
 
-### Commit B
-- unify preflight and fail-fast checks
-- message: `fix(cli): harden auto-workflow preflight contract [AUTO-S2]`
-
-### Commit C
-- docs / examples / runbook updates
-- message: `docs(cli): document canonical auto workflow [AUTO-S3]`
-
-### Commit D
-- QA harness / regression tests / verification notes
-- message: `test(cli): cover canonical auto workflow scenarios [AUTO-S4]`
-
----
-
-## Acceptance criteria
-
-The wave is complete only if all of the following are true:
-
-- `uv run dub auto --help` exists and is truthful
-- operator can provide one input video and trigger the full supported workflow from one command
-- route selection is explicit and deterministic
-- bad prerequisite states fail before expensive stage execution
-- docs match real behavior
-- fresh clone verification passes
-- `status`, `resume`, and `validate` still work after the new surface is introduced
+- `dub auto <video>` no longer depends on operator route knowledge for standard EN/JA inputs
+- route choice is visible and explainable
+- ambiguous cases fail early with a truthful recovery instruction
+- explicit controls still work
+- tests cover the contract
+- docs match verified runtime behavior
