@@ -134,7 +134,7 @@ def _normalize_raw(raw: dict | None) -> dict:
 
 
 def load_config(path: Path | str | None = None) -> DubConfig:
-    search = [Path(path)] if path else [Path("/path/to/config.yaml").expanduser()]
+    search = [Path(path).expanduser()] if path else [Path.home() / ".config" / "dub" / "config.yaml"]
     for p in search:
         if p.exists():
             try:

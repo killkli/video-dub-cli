@@ -179,3 +179,25 @@ def test_load_config_missing_paths_uses_defaults():
         cfg = load_config(p)
         assert cfg.logging.level == "DEBUG"
         assert cfg.paths.omnivoice_python == Path("python3")
+
+
+def test_load_config_none_reads_operator_config(monkeypatch, tmp_path):
+    fake_home = tmp_path / "home"
+    cfg_dir = fake_home / ".config" / "dub"
+    cfg_dir.mkdir(parents=True)
+    cfg_path = cfg_dir / "config.yaml"
+    cfg_path.write_text(
+        "paths:\n"
+        "  omnivoice_python: /tmp/omnivoice-python\n"
+        "defaults:\n"
+        "  source_lang: ja\n",
+        encoding="utf-8",
+    )
+
+    import dub.config as config_mod
+
+    monkeypatch.setattr(config_mod.Path, "home", classmethod(lambda cls: fake_home))
+
+    cfg = load_config(None)
+    assert cfg.paths.omnivoice_python == Path("/tmp/omnivoice-python")
+    assert cfg.defaults.source_lang == "ja"
