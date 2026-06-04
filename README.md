@@ -116,7 +116,7 @@ uv run dub auto talk.mp4 \
 ### 進階入口（escape hatch）
 
 ```bash
-uv run dub run talk.mp4 --source-lang en --target-lang zh
+uv run dub run talk.mp4 --source-lang en --target-lang zh --config ~/.config/dub/config.yaml
 ```
 
 `dub run` 保留用於需要明確覆寫 pipeline 參數的進階情境，常見 operator 情境應使用 `dub auto` 或 `en2zh`/`ja2zh` 別名。
@@ -226,6 +226,23 @@ uv run dub doctor --config ~/.config/dub/config.yaml
 
 ---
 
+## Critical Runtime Truths（操作前必須知道）
+
+以下為 T9/T10 smoke QA 發現的 runtime 事實，文件必須與之一致：
+
+1. **`dub doctor` 與實際 OmniVoice runtime 必須口徑一致。**
+   `dub doctor` 顯示 `omnivoice: READY` 不代表 OmniVoice 實際可以跑——`paths.omnivoice_python` 指向的 interpreter 必須有完整的 stage-05 依賴（torch、omnivoice、opencc）。
+   若 `dub doctor` 顯示 READY 但 OmniVoice 實際失敗，重跑 `dub bootstrap-omnivoice --config ~/.config/dub/config.yaml` 並確認 `paths.omnivoice_python` 指向正確的 venv。
+
+2. **OmniVoice 專用 interpreter 依賴真實 stage-05 deps。**
+   OmniVoice 的 wrapper script（如 `tts_omnivoice.sh`）需要 `torch`、`omnivoice`、`opencc`，這些不由標準 dub venv 提供，而由 `dub bootstrap-omnivoice` 所建立的獨立 venv 提供。
+
+3. **每個專案目錄是隔離的，產物驗證是 operator 責任。**
+   每次 `dub auto` / `en2zh` / `ja2zh` 在新目錄執行；`--project-dir` 用於控制位置。
+   完成後用 `dub validate --project-dir <dir>` 驗證產物：`07_final/video_dubbed_stem.mp4` 存在且 `state.json` 顯示全部 6 個 stage 完成。
+
+---
+
 ## 目前可以誠實宣稱的範圍
 
 ### 已驗證
@@ -242,5 +259,6 @@ uv run dub doctor --config ~/.config/dub/config.yaml
 - 不是所有 TTS backend 都在同一個 Python 環境內
 - OmniVoice 採「標準 dub venv + 專用 OmniVoice venv」雙環境契約
 - VoxCPM 依賴本機服務（`127.0.0.1:8808`）
+- `dub doctor` 顯示 READY 不等於 OmniVoice 在所有情況下都可用（需確認 interpreter deps）
 
 這是目前已驗證、可維運、可交付的 operator contract。

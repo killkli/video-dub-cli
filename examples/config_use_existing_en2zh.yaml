@@ -2,8 +2,7 @@
 # Standalone contract: defaults are repo-owned or PATH-resolved.
 #
 # Typical usage (no edits needed):
-#   cp examples/config_use_existing_en2zh.yaml ~/.config/dub/config.yaml
-#   uv run dub run talk.mp4 --source-lang en --target-lang zh \
+#   uv run dub en2zh talk.mp4 \
 #     --translate-mode use-existing \
 #     --translated-srt /path/to/translated.srt
 #

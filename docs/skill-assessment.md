@@ -65,7 +65,7 @@
 
 預期行為：
 1. 找到 `talk.mp4` 或询问路径
-2. 執行 `dub run /path/to/input/talk.mp4 --source-lang en --target-lang zh`
+2. 執行 `uv run dub en2zh /path/to/input/talk.mp4` 或 `dub auto /path/to/input/talk.mp4 --source-lang en`
 3. 完成後報告輸出位置
 
 ---

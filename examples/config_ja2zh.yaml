@@ -2,8 +2,8 @@
 # Standalone contract: defaults are repo-owned or PATH-resolved.
 #
 # Typical usage (no edits needed):
-#   cp examples/config_ja2zh.yaml ~/.config/dub/config.yaml
-#   uv run dub run anime.mp4 --source-lang ja --target-lang zh
+#   uv run dub ja2zh anime.mp4              # zero-flag canonical entrypoint
+#   uv run dub auto anime.mp4 --source-lang ja
 #
 # Override guide — uncomment only the lines you actually need to change.
 # For the Japanese route the active TTS adapter is VoxCPM. See

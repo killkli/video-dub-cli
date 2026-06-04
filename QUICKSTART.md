@@ -120,7 +120,7 @@ uv run dub auto talk.mp4 \
 ### 進階入口（需明確控制時使用）
 
 ```bash
-uv run dub run talk.mp4 --source-lang en --target-lang zh
+uv run dub run talk.mp4 --source-lang en --target-lang zh --config ~/.config/dub/config.yaml
 ```
 
 `dub run` 保留作為進階 escape hatch；常見情境請用 `dub auto` 或別名。
