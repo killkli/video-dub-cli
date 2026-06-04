@@ -220,6 +220,27 @@ def test_dub_doctor_reports_real_backend_python_gates(runner, tmp_path):
     assert "py:torchcodec:" in result.output
 
 
+def test_dub_doctor_reports_omnivoice_opencc_gate(runner, tmp_path):
+    """`dub doctor` must surface the Stage-05 OpenCC runtime gate for
+    OmniVoice so the operator sees the real blocker before running a
+    full smoke workflow.
+    """
+    cfg = tmp_path / "cfg.yaml"
+    cfg.write_text(
+        "paths:\n"
+        "  qwenasr_cli: /bin/true\n"
+        "  omnivoice_python: /bin/true\n"
+        "  skills_dir: /tmp/vendor/pipeline_scripts\n"
+        "  translation_skill: /bin/true\n",
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(main, ["doctor", "--config", str(cfg)])
+
+    assert result.exit_code == 0, result.output
+    assert "deps:opencc:" in result.output
+
+
 def test_auto_recover_missing_secrets_reads_zshrc(monkeypatch, tmp_path):
     """When GOOGLE_API_KEY is unset in env but exported in ~/.zshrc,
     `dub doctor` should auto-recover it and print a note. We redirect
