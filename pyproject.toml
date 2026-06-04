@@ -47,10 +47,45 @@ translation = [
     "google-genai>=1.0.0",
     "torchcodec>=0.13.0",
 ]
-# TTS / TTS-adjacent deps. Local-server libs are optional — only what the
-# repo's own adapter code imports at runtime. Backends that need heavy model
-# stacks belong in the system-bootstrap step, not in pip.
+# TTS / TTS-adjacent deps. The repo now owns the *adapter* and
+# *runner* code paths; the heavy model stacks are split into
+# per-backend optional extras so a fresh operator can pull in only
+# what they need. The base [tts] extra carries the small
+# dependency-light code (opencc + gradio_client) that the VoxCPM
+# route needs in the dub venv. OmniVoice and VoxCPM each have
+# their own extra for the heavier weights.
+#
+# Backend dep map:
+#   omnivoice → torch, torchaudio (+ the OmniVoice package, which
+#               is not on PyPI today; operators clone it to
+#               ~/Dev/OmniVoice and the script sys.path.insert's it
+#               at runtime — see vendor/pipeline_scripts/dubbing_batch_tts.py)
+#   voxcpme   → gradio_client, opencc (t2s only)
 tts = [
+    "opencc-python-reimplemented>=0.1.7",
+    "gradio_client>=0.16.0",
+]
+# OmniVoice backend: torch + torchaudio. The OmniVoice package
+# itself is not pip-installable today; this extra makes sure the
+# dub venv has the torch stack OmniVoice needs, and the readiness
+# probe for the omnivoice backend verifies torch is importable.
+tts-omnivoice = [
+    "torch>=2.0.0",
+    "torchaudio>=2.0.0",
+    "torchcodec>=0.13.0",
+]
+# VoxCPM backend: gradio_client + opencc for t2s. There is no
+# second Python interpreter to worry about — VoxCPM runs as a
+# gradio server, and the dub venv just needs the client libs.
+tts-vox = [
+    "gradio_client>=0.16.0",
+    "opencc-python-reimplemented>=0.1.7",
+]
+# Convenience meta-extra: every TTS dep the operator might need.
+# Does NOT include torch unless the operator also pulls in
+# [tts-omnivoice]; the omnivoice torch stack is large enough to
+# deserve its own explicit opt-in.
+tts-all = [
     "opencc-python-reimplemented>=0.1.7",
     "gradio_client>=0.16.0",
 ]
@@ -81,7 +116,11 @@ dev = [
     "ruff>=0.5.0",
 ]
 # All extras combined — convenient for an operator who wants the full
-# standalone experience in one `uv sync --extra all` step.
+# standalone experience in one `uv sync --extra all` step. Note that
+# this does NOT include the OmniVoice torch stack (large download);
+# for a fully-repo-contained en→zh pipeline, also pass
+# `--extra tts-omnivoice`. VoxCPM's deps are already in the base
+# `tts` extra.
 all = [
     "httpx>=0.27.0",
     "google-genai>=1.0.0",

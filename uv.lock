@@ -2040,6 +2040,19 @@ tts = [
     { name = "gradio-client" },
     { name = "opencc-python-reimplemented" },
 ]
+tts-all = [
+    { name = "gradio-client" },
+    { name = "opencc-python-reimplemented" },
+]
+tts-omnivoice = [
+    { name = "torch" },
+    { name = "torchaudio" },
+    { name = "torchcodec" },
+]
+tts-vox = [
+    { name = "gradio-client" },
+    { name = "opencc-python-reimplemented" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -2048,6 +2061,8 @@ requires-dist = [
     { name = "google-genai", marker = "extra == 'translation'", specifier = ">=1.0.0" },
     { name = "gradio-client", marker = "extra == 'all'", specifier = ">=0.16.0" },
     { name = "gradio-client", marker = "extra == 'tts'", specifier = ">=0.16.0" },
+    { name = "gradio-client", marker = "extra == 'tts-all'", specifier = ">=0.16.0" },
+    { name = "gradio-client", marker = "extra == 'tts-vox'", specifier = ">=0.16.0" },
     { name = "httpx", marker = "extra == 'all'", specifier = ">=0.27.0" },
     { name = "httpx", marker = "extra == 'translation'", specifier = ">=0.27.0" },
     { name = "loguru", specifier = ">=0.7.2" },
@@ -2058,6 +2073,8 @@ requires-dist = [
     { name = "opencc", marker = "extra == 'asr'", specifier = ">=1.1.9" },
     { name = "opencc-python-reimplemented", marker = "extra == 'all'", specifier = ">=0.1.7" },
     { name = "opencc-python-reimplemented", marker = "extra == 'tts'", specifier = ">=0.1.7" },
+    { name = "opencc-python-reimplemented", marker = "extra == 'tts-all'", specifier = ">=0.1.7" },
+    { name = "opencc-python-reimplemented", marker = "extra == 'tts-vox'", specifier = ">=0.1.7" },
     { name = "pydantic", specifier = ">=2.6.0" },
     { name = "pydantic-settings", marker = "extra == 'all'", specifier = ">=2.10.0" },
     { name = "pydantic-settings", marker = "extra == 'asr'", specifier = ">=2.10.0" },
@@ -2078,15 +2095,18 @@ requires-dist = [
     { name = "tenacity", specifier = ">=8.2.3" },
     { name = "torch", marker = "extra == 'all'", specifier = ">=2.0.0" },
     { name = "torch", marker = "extra == 'asr'", specifier = ">=2.0.0" },
+    { name = "torch", marker = "extra == 'tts-omnivoice'", specifier = ">=2.0.0" },
     { name = "torchaudio", marker = "extra == 'all'", specifier = ">=2.0.0" },
     { name = "torchaudio", marker = "extra == 'asr'", specifier = ">=2.0.0" },
+    { name = "torchaudio", marker = "extra == 'tts-omnivoice'", specifier = ">=2.0.0" },
     { name = "torchcodec", marker = "extra == 'all'", specifier = ">=0.13.0" },
     { name = "torchcodec", marker = "extra == 'asr'", specifier = ">=0.13.0" },
     { name = "torchcodec", marker = "extra == 'translation'", specifier = ">=0.13.0" },
+    { name = "torchcodec", marker = "extra == 'tts-omnivoice'", specifier = ">=0.13.0" },
     { name = "typer", marker = "extra == 'all'", specifier = ">=0.16.0" },
     { name = "typer", marker = "extra == 'asr'", specifier = ">=0.16.0" },
 ]
-provides-extras = ["translation", "tts", "asr", "pipeline", "dev", "all"]
+provides-extras = ["translation", "tts", "tts-omnivoice", "tts-vox", "tts-all", "asr", "pipeline", "dev", "all"]
 
 [[package]]
 name = "websockets"
