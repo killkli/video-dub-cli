@@ -713,10 +713,12 @@ def test_dub_run_prints_preflight_route_summary(runner, tmp_path, monkeypatch):
     assert "route=" in preflight
     assert "translate=delegate" in preflight
     assert "provider=gemini" in preflight
-    assert f"run complete: project={project_dir}" in result.output
+    assert f"run plan: project={project_dir}" in result.output
     assert f"final={project_dir / '07_final' / 'video_dubbed_stem.mp4'}" in result.output
+    assert f"next: dub resume --project-dir {project_dir}" in result.output
     assert f"next: dub status --project-dir {project_dir}" in result.output
     assert f"next: dub validate --project-dir {project_dir}" in result.output
+    assert f"run complete: project={project_dir}" in result.output
 
 
 def test_dub_resume_restores_use_existing_route_from_state(runner, tmp_path, monkeypatch):
@@ -762,6 +764,9 @@ def test_dub_resume_restores_use_existing_route_from_state(runner, tmp_path, mon
     assert seen["translated_srt"] == str(external_srt)
     assert f"resume complete: project={project_dir}" in result.output
     assert f"final={project_dir / '07_final' / 'video_dubbed_stem.mp4'}" in result.output
+    assert f"next: dub resume --project-dir {project_dir}" in result.output
+    assert f"next: dub status --project-dir {project_dir}" in result.output
+    assert f"next: dub validate --project-dir {project_dir}" in result.output
 
 
 def test_dub_run_use_existing_fails_with_nonexistent_translated_srt_path(runner, tmp_path):

@@ -256,13 +256,28 @@ def _run_preflight(project_dir: Path, cfg, source_lang: str) -> str:
     )
 
 
-def _completion_summary(prefix: str, project_dir: Path) -> str:
-    final_mp4 = project_dir / "07_final" / "video_dubbed_stem.mp4"
+def _final_output_path(project_dir: Path) -> Path:
+    return project_dir / "07_final" / "video_dubbed_stem.mp4"
+
+
+def _recovery_hints(project_dir: Path) -> str:
     return (
-        f"{prefix}: project={project_dir} final={final_mp4}\n"
+        f"next: dub resume --project-dir {project_dir}\n"
         f"next: dub status --project-dir {project_dir}\n"
         f"next: dub validate --project-dir {project_dir}"
     )
+
+
+def _operator_paths_summary(prefix: str, project_dir: Path) -> str:
+    final_mp4 = _final_output_path(project_dir)
+    return (
+        f"{prefix}: project={project_dir} final={final_mp4}\n"
+        f"{_recovery_hints(project_dir)}"
+    )
+
+
+def _completion_summary(prefix: str, project_dir: Path) -> str:
+    return _operator_paths_summary(prefix, project_dir)
 
 
 def _resolve_auto_source_lang(source_lang: str | None, cfg) -> str:
@@ -412,6 +427,7 @@ def _run_pipeline_command(
             translated_srt=translated_srt,
         )
         pdir = _prepare_project(video, str(project_dir) if project_dir else None, cfg)
+        click.echo(_operator_paths_summary("run plan", pdir))
         _validate_run_contract(pdir, cfg)
         click.echo(_run_preflight(pdir, cfg, cfg.defaults.source_lang))
         _bootstrap_state(pdir, cfg)
