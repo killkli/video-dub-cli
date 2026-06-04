@@ -28,9 +28,17 @@ def test_dub_run_help_exits_zero(runner):
 def test_dub_help_lists_one_shot_aliases(runner):
     result = runner.invoke(main, ["--help"])
     assert result.exit_code == 0
+    assert "auto" in result.output
     assert "en2zh" in result.output
     assert "ja2zh" in result.output
     assert "run" in result.output
+
+
+def test_dub_auto_help_exits_zero(runner):
+    result = runner.invoke(main, ["auto", "--help"])
+    assert result.exit_code == 0
+    assert "one-command workflow" in result.output
+    assert "--source-lang" in result.output
 
 
 def test_dub_en2zh_help_exits_zero(runner):
@@ -495,6 +503,105 @@ def test_dub_ja2zh_alias_sets_languages_and_completes(runner, tmp_path, monkeypa
     state = load_state(project_dir)
     assert state.input["source_lang"] == "ja"
     assert state.input["target_lang"] == "zh"
+
+
+def test_dub_auto_uses_explicit_source_lang_and_completes(runner, tmp_path, monkeypatch):
+    video = tmp_path / "video.mp4"
+    video.write_bytes(b"fake")
+    project_dir = tmp_path / "proj"
+    cfg = tmp_path / "cfg.yaml"
+    cfg.write_text(
+        "paths:\n"
+        "  qwenasr_cli: /bin/true\n"
+        "  omnivoice_python: /bin/true\n"
+        "  skills_dir: /tmp/vendor/pipeline_scripts\n"
+        "  translation_skill: /bin/true\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr("dub.cli.project_input_info", lambda _: {
+        "video_path": str(project_dir / "01_raw_video" / "video.mp4"),
+        "video_sha256": "abc",
+        "duration_sec": 1.23,
+    })
+    monkeypatch.setattr("dub.cli.run_pipeline", lambda *args, **kwargs: {"ok": True})
+
+    result = runner.invoke(
+        main,
+        [
+            "auto", str(video),
+            "--source-lang", "ja",
+            "--project-dir", str(project_dir),
+            "--config", str(cfg),
+            "--yes",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "preflight: src=ja tgt=zh" in result.output
+    state = load_state(project_dir)
+    assert state.input["source_lang"] == "ja"
+    assert state.input["target_lang"] == "zh"
+
+
+def test_dub_auto_uses_config_default_source_lang_when_flag_missing(runner, tmp_path, monkeypatch):
+    video = tmp_path / "video.mp4"
+    video.write_bytes(b"fake")
+    project_dir = tmp_path / "proj"
+    cfg = tmp_path / "cfg.yaml"
+    cfg.write_text(
+        "defaults:\n"
+        "  source_lang: ja\n"
+        "paths:\n"
+        "  qwenasr_cli: /bin/true\n"
+        "  omnivoice_python: /bin/true\n"
+        "  skills_dir: /tmp/vendor/pipeline_scripts\n"
+        "  translation_skill: /bin/true\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr("dub.cli.project_input_info", lambda _: {
+        "video_path": str(project_dir / "01_raw_video" / "video.mp4"),
+        "video_sha256": "abc",
+        "duration_sec": 1.23,
+    })
+    monkeypatch.setattr("dub.cli.run_pipeline", lambda *args, **kwargs: {"ok": True})
+
+    result = runner.invoke(
+        main,
+        [
+            "auto", str(video),
+            "--project-dir", str(project_dir),
+            "--config", str(cfg),
+            "--yes",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "preflight: src=ja tgt=zh" in result.output
+    state = load_state(project_dir)
+    assert state.input["source_lang"] == "ja"
+
+
+def test_dub_auto_rejects_unsupported_source_lang(runner, tmp_path):
+    video = tmp_path / "video.mp4"
+    video.write_bytes(b"fake")
+    cfg = tmp_path / "cfg.yaml"
+    cfg.write_text(
+        "defaults:\n"
+        "  source_lang: fr\n"
+        "paths:\n"
+        "  qwenasr_cli: /bin/true\n"
+        "  omnivoice_python: /bin/true\n"
+        "  skills_dir: /tmp/vendor/pipeline_scripts\n"
+        "  translation_skill: /bin/true\n",
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(main, ["auto", str(video), "--config", str(cfg)])
+
+    assert result.exit_code != 0
+    assert "dub auto requires source language en or ja" in result.output
 
 
 def test_dub_resume_restores_source_lang_from_state(runner, tmp_path, monkeypatch):

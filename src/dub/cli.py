@@ -132,6 +132,18 @@ def _completion_summary(prefix: str, project_dir: Path) -> str:
     )
 
 
+def _resolve_auto_source_lang(source_lang: str | None, cfg) -> str:
+    candidate = (source_lang or cfg.defaults.source_lang or "").strip().lower()
+    if candidate in {"en", "english"}:
+        return "en"
+    if candidate in {"ja", "jp", "jpn", "japanese"}:
+        return "ja"
+    raise UserError(
+        "dub auto requires source language en or ja. "
+        "Pass --source-lang en|ja or set defaults.source_lang accordingly."
+    )
+
+
 def _which_status(name: str) -> tuple[bool, str]:
     resolved = shutil.which(name)
     return (resolved is not None, resolved or "missing")
@@ -302,6 +314,56 @@ def run(video, source_lang, target_lang, project_dir, config_path,
         source_lang=source_lang,
         target_lang=target_lang,
         project_dir=project_dir,
+        config_path=config_path,
+        translate_mode=translate_mode,
+        translated_srt=translated_srt,
+        vocal_gain=vocal_gain,
+        inst_gain=inst_gain,
+        keep_fulltrack=keep_fulltrack,
+        yes=yes,
+    )
+
+
+@main.command(name="auto")
+@click.argument("video", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--source-lang",
+    "source_lang",
+    default=None,
+    help="Source language route for the one-command workflow (supported: en, ja). Defaults to config/defaults.source_lang.",
+)
+@click.option("--project-dir", type=click.Path(path_type=Path), default=None,
+              help="Project directory (default: <video-stem>.dub/ next to the input video).")
+@click.option("--config", "config_path", type=click.Path(path_type=Path), default=None)
+@click.option(
+    "--translate-mode",
+    type=click.Choice(["delegate", "skip", "use-existing"]),
+    default="delegate",
+)
+@click.option("--translated-srt", type=click.Path(path_type=Path), default=None)
+@click.option("--vocal-gain", type=float, default=None)
+@click.option("--inst-gain", type=float, default=None)
+@click.option("--keep-fulltrack", is_flag=True, default=False)
+@click.option("--yes", "-y", is_flag=True, default=False)
+def auto(video, source_lang, project_dir, config_path, translate_mode, translated_srt, vocal_gain, inst_gain, keep_fulltrack, yes):
+    """Run the canonical one-command workflow for English→Chinese or Japanese→Chinese.
+
+    This productized entrypoint resolves the source-language route first,
+    then dispatches to the same staged pipeline contract used by the
+    explicit `en2zh` and `ja2zh` commands. Use `--source-lang en|ja` to
+    override config/defaults.source_lang when needed.
+    """
+    try:
+        cfg = load_config(config_path)
+        resolved_source_lang = _resolve_auto_source_lang(source_lang, cfg)
+    except UserError as exc:
+        raise click.ClickException(str(exc)) from exc
+    effective_project_dir = project_dir if project_dir is not None else _default_auto_project_dir(video)
+    _run_pipeline_command(
+        video,
+        source_lang=resolved_source_lang,
+        target_lang="zh",
+        project_dir=effective_project_dir,
         config_path=config_path,
         translate_mode=translate_mode,
         translated_srt=translated_srt,
