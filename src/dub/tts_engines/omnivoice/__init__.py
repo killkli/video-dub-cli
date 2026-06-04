@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Optional
 
 from dub.config import DubConfig
+from dub.runtime_paths import pipeline_script
 from dub.tts_engines import ResolvedRoute, register
 from dub.tts_engines.contract import TtsReadiness, TtsRoute
 from dub.tts_engines import diagnostics as diag
@@ -116,6 +117,16 @@ def readiness(config: DubConfig) -> TtsReadiness:
     which boxes we never got to.
     """
     checks: list[tuple[str, str, str]] = []
+
+    override_script = pipeline_script("dubbing_batch_tts.py")
+    if os.environ.get("DUB_PIPELINE_SCRIPTS_DIR") and override_script.is_file():
+        checks.append(("test-seam", "ok", str(override_script)))
+        return TtsReadiness(
+            backend=BACKEND_NAME,
+            ready=True,
+            detail=f"test seam active via {override_script}",
+            checks=checks,
+        )
 
     route = find_route("en")
     if route is None:

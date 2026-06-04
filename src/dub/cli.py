@@ -694,9 +694,21 @@ def validate(project_dir):
         state = load_state(project_dir)
         stage_count = len(state.stages)
     except FileNotFoundError:
-        stage_count = 0
-        click.echo(f"validate ok: project={project_dir} stages={stage_count} mode=unknown")
-        return
+        raise click.ClickException(
+            f"validate failed: project={project_dir} missing state (.dub/state.json)"
+        )
+
+    failed_stages = [name for name, st in state.stages.items() if st.status == "failed"]
+    if failed_stages:
+        raise click.ClickException(
+            f"validate failed: project={project_dir} failed_stages={','.join(failed_stages)}"
+        )
+
+    final_mp4 = _final_output_path(project_dir)
+    if not final_mp4.exists() or final_mp4.stat().st_size == 0:
+        raise click.ClickException(
+            f"validate failed: project={project_dir} missing final artifact {final_mp4}"
+        )
 
     ok, detail = _validate_translated_subtitle_contract(project_dir, state)
     if not ok:

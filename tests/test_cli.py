@@ -221,11 +221,14 @@ def test_dub_doctor_reports_real_backend_python_gates(runner, tmp_path):
     assert "py:torchcodec:" in result.output
 
 
-def test_dub_doctor_reports_omnivoice_opencc_gate(runner, tmp_path):
+def test_dub_doctor_reports_omnivoice_opencc_gate(runner, tmp_path, monkeypatch):
     """`dub doctor` must surface the Stage-05 OpenCC runtime gate for
     OmniVoice so the operator sees the real blocker before running a
     full smoke workflow.
     """
+    monkeypatch.delenv("DUB_PIPELINE_SCRIPTS_DIR", raising=False)
+    monkeypatch.delenv("DUB_ASR_TEST_FIXTURE_SRT", raising=False)
+
     cfg = tmp_path / "cfg.yaml"
     cfg.write_text(
         "paths:\n"
@@ -326,6 +329,7 @@ def _make_validate_project(tmp_path, *, translate_mode="delegate", translate_sta
 
 def test_dub_validate_fails_when_translated_srt_required_but_missing(runner, tmp_path):
     project_dir = _make_validate_project(tmp_path, translate_mode="delegate", translate_stage_status="done")
+    (project_dir / "07_final" / "video_dubbed_stem.mp4").write_bytes(b"fake-mp4")
 
     result = runner.invoke(main, ["validate", "--project-dir", str(project_dir)])
 
@@ -336,6 +340,7 @@ def test_dub_validate_fails_when_translated_srt_required_but_missing(runner, tmp
 
 def test_dub_validate_allows_missing_translated_srt_when_translate_stage_skipped(runner, tmp_path):
     project_dir = _make_validate_project(tmp_path, translate_mode="skip", translate_stage_status="skipped")
+    (project_dir / "07_final" / "video_dubbed_stem.mp4").write_bytes(b"fake-mp4")
 
     result = runner.invoke(main, ["validate", "--project-dir", str(project_dir)])
 
@@ -348,12 +353,50 @@ def test_dub_validate_ok_when_use_existing_translated_srt_present(runner, tmp_pa
     project_dir = _make_validate_project(tmp_path, translate_mode="use-existing", translate_stage_status="done")
     translated = project_dir / "05_translated_srt" / "video.zhtw.srt"
     translated.write_text("1\n00:00:00,000 --> 00:00:01,000\n哈囉\n", encoding="utf-8")
+    (project_dir / "07_final" / "video_dubbed_stem.mp4").write_bytes(b"fake-mp4")
 
     result = runner.invoke(main, ["validate", "--project-dir", str(project_dir)])
 
     assert result.exit_code == 0
     assert "validate ok:" in result.output
     assert "mode=use-existing" in result.output
+
+
+def test_dub_validate_fails_when_state_missing_even_if_dirs_exist(runner, tmp_path):
+    project_dir = tmp_path / "proj"
+    for rel in ["01_raw_video", "02_stems", "03_asr", "04_ref_audio", "05_translate", "05_translated_srt", "06_tts_wav", "07_final", ".dub"]:
+        (project_dir / rel).mkdir(parents=True, exist_ok=True)
+
+    result = runner.invoke(main, ["validate", "--project-dir", str(project_dir)])
+
+    assert result.exit_code != 0
+    assert "validate failed:" in result.output
+    assert "missing state" in result.output
+
+
+def test_dub_validate_fails_when_any_stage_failed(runner, tmp_path):
+    project_dir = _make_validate_project(tmp_path, translate_mode="delegate", translate_stage_status="done")
+    (project_dir / "07_final" / "video_dubbed_stem.mp4").write_bytes(b"fake-mp4")
+
+    state = load_state(project_dir)
+    state.stages["05_tts"].status = "failed"
+    save_state(project_dir, state)
+
+    result = runner.invoke(main, ["validate", "--project-dir", str(project_dir)])
+
+    assert result.exit_code != 0
+    assert "validate failed:" in result.output
+    assert "failed_stages=05_tts" in result.output
+
+
+def test_dub_validate_fails_when_final_artifact_missing(runner, tmp_path):
+    project_dir = _make_validate_project(tmp_path, translate_mode="delegate", translate_stage_status="done")
+
+    result = runner.invoke(main, ["validate", "--project-dir", str(project_dir)])
+
+    assert result.exit_code != 0
+    assert "validate failed:" in result.output
+    assert "missing final artifact" in result.output
 
 
 def test_dub_run_use_existing_requires_translated_srt(runner, tmp_path):

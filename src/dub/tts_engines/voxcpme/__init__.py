@@ -24,11 +24,13 @@ and opencc packages are pip-installable into the dub venv itself
 """
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from typing import Optional
 
 from dub.config import DubConfig
+from dub.runtime_paths import pipeline_script
 from dub.tts_engines import ResolvedRoute, register
 from dub.tts_engines.contract import TtsReadiness, TtsRoute
 from dub.tts_engines import diagnostics as diag
@@ -103,6 +105,16 @@ def readiness(config: DubConfig, *, service_host: str = "127.0.0.1",
     5. service — the local gradio server is reachable
     """
     checks: list[tuple[str, str, str]] = []
+
+    override_script = pipeline_script("dubbing_batch_tts_vox.py")
+    if os.environ.get("DUB_PIPELINE_SCRIPTS_DIR") and override_script.is_file():
+        checks.append(("test-seam", "ok", str(override_script)))
+        return TtsReadiness(
+            backend=BACKEND_NAME,
+            ready=True,
+            detail=f"test seam active via {override_script}",
+            checks=checks,
+        )
 
     route = find_route("ja")
     if route is None:

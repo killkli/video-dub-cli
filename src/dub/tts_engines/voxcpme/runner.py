@@ -23,6 +23,7 @@ location, which is the same module path but a different prefix.
 """
 from __future__ import annotations
 
+import os
 import runpy
 from pathlib import Path
 
@@ -31,30 +32,32 @@ VENDOR_SCRIPT_NAME = "dubbing_batch_tts_vox.py"
 
 
 def resolve_vendor_script() -> Path:
-    """Locate ``vendor/pipeline_scripts/dubbing_batch_tts_vox.py`` relative to this file.
+    """Locate the heavy-lift Stage-05 script.
 
-    The package lives at ``src/dub/tts_engines/voxcpme/runner.py`` in
-    the source tree; we walk up parents to find the repo root, where
-    ``vendor/`` lives. The walk is also tolerant of pip-install layouts
-    that drop ``dub`` under ``site-packages`` (the module path is the
-    same, but the install prefix is different; we still find the
-    vendored script in the source tree because it ships as package
-    data alongside the installed package).
-
-    The function is called from :func:`main` rather than at import
-    time, so that a missing vendored script produces a runtime error
-    with a clear message instead of breaking ``dub`` import (and
-    therefore ``dub doctor``).
+    Production defaults to the repo-owned vendored script under
+    ``vendor/pipeline_scripts/``. Hermetic integration / operator QA may
+    override that location via ``DUB_PIPELINE_SCRIPTS_DIR``. Keep this
+    runner dependency-light: it may be executed by a backend interpreter
+    that does not have the ``dub`` package importable.
     """
+    override = os.environ.get("DUB_PIPELINE_SCRIPTS_DIR")
+    if override:
+        candidate = Path(override) / VENDOR_SCRIPT_NAME
+        if candidate.is_file():
+            return candidate
+        raise FileNotFoundError(
+            f"Could not locate TTS script {VENDOR_SCRIPT_NAME!r} at {candidate}. "
+            "DUB_PIPELINE_SCRIPTS_DIR override is broken."
+        )
+
     here = Path(__file__).resolve()
     for ancestor in here.parents:
         candidate = ancestor / "vendor" / "pipeline_scripts" / VENDOR_SCRIPT_NAME
         if candidate.is_file():
             return candidate
     raise FileNotFoundError(
-        f"Could not locate vendored TTS script {VENDOR_SCRIPT_NAME!r} "
-        f"walking up from {here}. Repo layout invariant broken — "
-        f"is the dub repo checked out and intact?"
+        f"Could not locate TTS script {VENDOR_SCRIPT_NAME!r} walking up from {here}. "
+        "Repo layout invariant broken."
     )
 
 
