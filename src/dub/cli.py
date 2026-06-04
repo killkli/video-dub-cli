@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
+import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 
 import click
@@ -140,6 +143,9 @@ def _preflight_route_summary(project_dir: Path, cfg) -> str:
 #
 # Keeping this in one place prevents drift: adding a new auto-route
 # means appending to this mapping and to ``_resolve_auto_source_lang``.
+# Wave 3 (T3) — the resolver now also dispatches to ``_detect_auto_source_lang``
+# when the explicit ``--source-lang`` flag is absent, so the contract is
+# "explicit override > auto detect > early fail with re-run guidance".
 _SUPPORTED_AUTO_SOURCE_LANGS: tuple[str, ...] = ("en", "ja")
 _TTS_BACKEND_FOR_SOURCE: dict[str, str] = {
     "en": "omnivoice",
@@ -280,16 +286,227 @@ def _completion_summary(prefix: str, project_dir: Path) -> str:
     return _operator_paths_summary(prefix, project_dir)
 
 
-def _resolve_auto_source_lang(source_lang: str | None, cfg) -> str:
-    candidate = (source_lang or cfg.defaults.source_lang or "").strip().lower()
+@dataclass(frozen=True)
+class AutoRouteDecision:
+    """Operator-visible verdict from the auto route detector.
+
+    ``source_lang`` is the normalized source language (``"en"`` / ``"ja"``)
+    when the detector is confident; ``None`` when detection is ambiguous or
+    not confidently reducible to the supported auto routes. ``basis`` is a
+    short stable string that ``dub auto`` echoes on the preflight line so
+    operators can audit why a particular route was chosen without re-running
+    with ``--debug``.
+    """
+
+    source_lang: str | None
+    basis: str
+
+
+# How many seconds of the input audio we probe for language detection.
+# 30s is enough to get a representative ASR sample for a confident
+# en/ja call without paying for full-length transcription; anything
+# shorter and we risk ASR garbage on intros / title cards.
+_AUTO_PROBE_SECONDS = 30
+
+
+# Unicode ranges used for the post-ASR text classifier. We deliberately
+# stick to script-level heuristics here (not a trained langid model)
+# because the only thing the auto route needs to disambiguate is
+# Latin-script (English) vs. CJK kana/kanji (Japanese) for the common
+# youtube → zh dubbing path.
+_JA_CHAR_PATTERN = re.compile(
+    r"[\u3040-\u309F"   # hiragana
+    r"\u30A0-\u30FF"     # katakana
+    r"\u4E00-\u9FFF"     # CJK unified ideographs (kanji / kanji-like)
+    r"\uFF66-\uFF9D"     # half-width katakana
+    r"]"
+)
+_LATIN_CHAR_PATTERN = re.compile(r"[A-Za-z]")
+
+
+def _classify_probe_text(text: str) -> str | None:
+    """Classify ASR probe output as ``"en"``, ``"ja"``, or ``None`` (ambiguous).
+
+    The classifier is intentionally simple: it counts script-bearing
+    characters and picks the dominant one. Mixed / sparse text returns
+    ``None`` so the CLI layer can fail fast.
+    """
+    if not text or not text.strip():
+        return None
+    ja_count = len(_JA_CHAR_PATTERN.findall(text))
+    latin_count = len(_LATIN_CHAR_PATTERN.findall(text))
+    if ja_count == 0 and latin_count == 0:
+        return None
+    if ja_count == 0:
+        return "en"
+    if latin_count == 0:
+        return "ja"
+    # Mixed: pick the dominant script, but only if it dominates by
+    # at least 3x. Mixed-script ASR is the strongest signal that the
+    # source is neither cleanly en nor ja (e.g. code-switched content,
+    # Korean, Chinese, etc.) and we should defer to the operator.
+    if ja_count >= 3 * latin_count:
+        return "ja"
+    if latin_count >= 3 * ja_count:
+        return "en"
+    return None
+
+
+def _extract_probe_audio(video: Path, seconds: int = _AUTO_PROBE_SECONDS) -> Path | None:
+    """Extract a short mono-16k WAV from ``video`` for the language probe.
+
+    Returns the temp WAV path on success, or ``None`` when ``ffmpeg`` is
+    not on ``$PATH`` / fails — callers should treat ``None`` as
+    "detector unavailable" and surface that as an ambiguous decision.
+    """
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        return None
+    tmp = Path(tempfile.mkstemp(prefix="dub_autoprobe_", suffix=".wav")[1])
+    try:
+        result = subprocess.run(
+            [
+                ffmpeg, "-y", "-loglevel", "error",
+                "-i", str(video),
+                "-t", str(seconds),
+                "-vn", "-ac", "1", "-ar", "16000",
+                "-f", "wav", str(tmp),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0 or not tmp.exists() or tmp.stat().st_size == 0:
+            return None
+        return tmp
+    except Exception:
+        return None
+
+
+def _transcribe_probe_audio(wav: Path) -> str:
+    """Run the repo ASR pipeline on a short audio probe.
+
+    Imports the qwenasr_mlx_cli pipeline lazily so ``dub auto`` does not
+    require the ASR backend to be installed in environments that only
+    use route-specific commands (``dub en2zh`` / ``dub ja2zh`` /
+    ``dub run``).
+
+    The probe is always run with ``language=None`` (let the model pick)
+    and with a plain-text output so the classifier can see the actual
+    characters — SRT timestamps are noise for language detection.
+    """
+    from qwenasr_mlx_cli.pipelines.transcribe import run_transcription
+
+    return run_transcription(
+        input_path=wav,
+        backend_name="mlx",
+        output_format="txt",
+        language=None,
+        prompt=None,
+        subtitle_config=None,
+        convert_simplified_to_traditional=False,
+    )
+
+
+def _detect_auto_source_lang(video: Path, cfg) -> AutoRouteDecision:
+    """Decide the source language of ``video`` for ``dub auto``.
+
+    Implementation strategy (head-probe):
+
+    1. Extract up to ``_AUTO_PROBE_SECONDS`` of mono-16k audio from
+       ``video`` via ``ffmpeg``.
+    2. Run the repo-owned ASR pipeline (``qwenasr_mlx_cli``) on the
+       probe with no language hint, so the model can pick freely.
+    3. Classify the transcribed text by character script: Japanese
+       kana/kanji → ``"ja"``, ASCII/Latin → ``"en"``, mixed / sparse
+       / unrecognised → ambiguous.
+
+    Failure modes that the CLI layer turns into an early UserError:
+
+    * ``ffmpeg`` missing → ``"ambiguous:no-ffmpeg"``
+    * ASR backend unavailable → ``"ambiguous:asr-unavailable"``
+    * ASR probe produced no text / non-recognisable script →
+      ``"ambiguous:low-confidence"``
+
+    Any unexpected runtime error is re-raised — the CLI layer maps it
+    to a fail-fast error rather than silently falling back to a
+    config default. This is the contract T2 pins: ``dub auto`` is
+    not allowed to silently degrade to ``cfg.defaults.source_lang``.
+    """
+    if not video.exists():
+        raise UserError(f"input video not found: {video}")
+
+    wav = _extract_probe_audio(video)
+    if wav is None:
+        return AutoRouteDecision(
+            source_lang=None,
+            basis="ambiguous:no-ffmpeg",
+        )
+    try:
+        text = _transcribe_probe_audio(wav)
+    except Exception as exc:
+        return AutoRouteDecision(
+            source_lang=None,
+            basis=f"ambiguous:asr-unavailable:{type(exc).__name__}",
+        )
+    finally:
+        try:
+            wav.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+    classified = _classify_probe_text(text)
+    if classified is None:
+        return AutoRouteDecision(
+            source_lang=None,
+            basis="ambiguous:low-confidence",
+        )
+    return AutoRouteDecision(
+        source_lang=classified,
+        basis=f"detected:{classified}-asr-head",
+    )
+
+
+def _normalize_explicit_source_lang(source_lang: str | None) -> str | None:
+    """Normalize a user-supplied ``--source-lang`` value to ``"en"``/``"ja"``/``None``.
+
+    ``None`` means "no explicit flag — caller should run the detector".
+    """
+    if source_lang is None:
+        return None
+    candidate = source_lang.strip().lower()
     if candidate in {"en", "english"}:
         return "en"
     if candidate in {"ja", "jp", "jpn", "japanese"}:
         return "ja"
     raise UserError(
-        "dub auto requires source language en or ja. "
-        "Pass --source-lang en|ja or set defaults.source_lang accordingly."
+        f"dub auto --source-lang {source_lang!r} is not supported "
+        f"(supported: en, ja). Re-run with --source-lang en|ja."
     )
+
+
+def _resolve_auto_route(video: Path, source_lang: str | None, cfg) -> AutoRouteDecision:
+    """Apply the wave-3 precedence: explicit > auto detect > early fail.
+
+    Branches:
+
+    1. Explicit ``--source-lang`` flag (normalized) → return immediately
+       with a ``"override:..."`` basis so the preflight line tells the
+       operator the detector was bypassed.
+    2. No flag → call :func:`_detect_auto_source_lang` and return its
+       decision verbatim.
+    3. The detector returns ``source_lang=None`` (ambiguous) → the CLI
+       layer surfaces this as an early UserError; we do *not* fall
+       back to ``cfg.defaults.source_lang`` because that was the old
+       route-aware behavior T3 explicitly retires.
+    """
+    explicit = _normalize_explicit_source_lang(source_lang)
+    if explicit is not None:
+        return AutoRouteDecision(
+            source_lang=explicit,
+            basis="override:explicit-flag",
+        )
+    return _detect_auto_source_lang(video, cfg)
 
 
 def _which_status(name: str) -> tuple[bool, str]:
