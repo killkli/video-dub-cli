@@ -1,151 +1,66 @@
 # video-dub-cli
 
-> Resumable CLI pipeline for translating and dubbing videos into Chinese.
-> Canonical path: one repo + `uv sync --extra all` for CLI/ASR/Gemini/VoxCPM.
-> OmniVoice remains an optional backend with one explicit external checkout.
+> 可續跑的影片翻譯／中文配音 CLI 管線。
+> 目前正式支援的標準路徑：**單一 repo + `uv sync --extra all`**，提供 CLI、本地 ASR、Gemini 翻譯與 VoxCPM 路線。
+> OmniVoice 已改為 **repo 內建程式碼 + 獨立 Python 環境** 的可選路線，請用 `dub bootstrap-omnivoice` 建立。
 
 ```bash
 uv sync --extra all
-uv run dub doctor                 # confirm prerequisites
+uv run dub doctor
 uv run dub en2zh talk.mp4
 ```
 
-`video-dub-cli` packages a multi-stage video-dubbing workflow into a
-single CLI entrypoint with persistent project state, resumability, and
-explicit artifact contracts.
+`video-dub-cli` 把多階段影片配音流程收斂成單一 CLI，具備：
 
-## What is self-contained in this repo (and what is not)
+- 專案狀態持久化
+- 中斷後續跑
+- 各 stage 產物落盤
+- 明確的環境檢查、驗證、清理與續跑操作面
 
-| Concern | Self-contained? | Notes |
-|---|---|---|
-| CLI shell, config, validation, retry | yes | the `dub` script and friends ship in this repo |
-| Pipeline scripts (stems, ref-audio, loudnorm, remix) | yes | vendored under `vendor/pipeline_scripts/` |
-| Translation stage (Gemini REST) | yes | in-process logic in `src/dub/translator_gemini.py` |
-| ASR default backend | yes | repo-owned in-process backend via `src/qwenasr_mlx_cli`; install with `uv sync --extra all` |
-| TTS backends (OmniVoice, VoxCPM) | **partial** | adapter registry is in-repo; model stacks are operator-provided and `dub doctor` reports per-backend readiness |
-| ffmpeg / ffprobe | **system dep** | install via your OS package manager before any real run |
-| Translation API key (Gemini) | **operator-supplied** | export `GOOGLE_API_KEY` (or `GEMINI_API_KEY`); see [API key setup](#api-key-setup) |
+---
 
-This contract is verified end-to-end on `feature/standalone-repo-uv` by
-`docs/qa-standalone-matrix.md` (T6). A fresh clone + `uv sync --extra
-dev` + `uv run dub doctor` + a fake-backend end-to-end smoke all pass.
+## 目前這個 repo 真的包含了什麼
 
-`uv sync --extra all` 同步把 real-backend 依賴（ASR 的
-`qwen3-asr-mlx` / `soundfile` / `pydub` / `silero-vad` / `torchcodec`、
-翻譯的 `google-genai`、以及 VoxCPM 的 `gradio_client`）都裝進 dub
-venv，並由 `dub doctor` 逐 gate 報告 ASR / Gemini / OmniVoice /
-VoxCPM 的 ready 狀態。
-`dub doctor` 還會在 Hermes / CI shell 中自動從 `~/.zshrc` 復原
-Gemini key，這一點對陌生片源上手的 operator 來說是體感最明顯的進步。
-Real-backend `dub en2zh` / `dub ja2zh` end-to-end QA 紀錄見
-`docs/operator-qa-real-backend-en2zh-2026-06-03.md` 與
-`docs/operator-qa-real-backend-ja2zh-2026-06-03.md`。
+### 已內建
+- CLI 與設定載入
+- 專案狀態管理與重跑控制
+- 管線腳本（`vendor/pipeline_scripts/`）
+- Gemini 翻譯邏輯
+- 內建 ASR 路線（`src/qwenasr_mlx_cli/`）
+- OmniVoice 轉接層與內嵌模型程式碼（`src/omnivoice/`）
+- VoxCPM 轉接層
 
-## Highlights
+### 仍屬外部前置條件
+- `ffmpeg` / `ffprobe`
+- Gemini API key
+- VoxCPM 本機服務（若要走 VoxCPM）
+- OmniVoice 專用 Python 環境（若要走 OmniVoice；可由 `dub bootstrap-omnivoice` 自動建立）
 
-- **One-shot operator aliases**: `dub en2zh`, `dub ja2zh`
-- **Advanced/base entrypoint**: `dub run`, plus `dub resume`, `dub status`, `dub clean`, `dub validate`, `dub doctor`, `dub bootstrap`
-- **Resumable by design**: continue interrupted runs with `dub resume`
-- **Artifact-driven workflow**: each stage persists outputs on disk under `01_raw_video/`, `02_stems/`, ... `07_final/`
-- **Operator-grade validation**: `status`, `clean`, `validate`, and the readiness check `dub doctor` are first-class
-- **Standalone install**: `uv sync --extra all` fully provisions the canonical CLI + ASR + Gemini + VoxCPM path; OmniVoice is the only remaining backend that still needs an explicit external checkout via `DUB_OMNIVOICE_ROOT`
-- **Real pipeline stages**: stems → ASR → ref-audio → translation → TTS → final assembly
+---
 
-## Pipeline
+## 正式支援的安裝契約
 
-1. Vocal/instrumental separation
-2. ASR transcription
-3. Reference-audio extraction per segment
-4. Subtitle translation
-5. TTS dubbing per segment
-6. Final MP4 assembly and mix
-
-Because every stage writes durable artifacts, the pipeline can resume
-from partial completion instead of restarting from zero.
-
-## Supported workflows
-
-### Use an existing translated subtitle file
-
-```bash
-uv run dub run talk.mp4 \
-  --source-lang en \
-  --target-lang zh \
-  --translate-mode use-existing \
-  --translated-srt talk.zhtw.srt
-```
-
-### One-shot English → Chinese operator flow
-
-```bash
-uv run dub en2zh talk.mp4
-```
-
-### One-shot Japanese → Chinese operator flow
-
-```bash
-uv run dub ja2zh talk.mp4
-```
-
-### Advanced/base entrypoint (same pipeline, explicit languages)
-
-```bash
-uv run dub run talk.mp4 --source-lang en --target-lang zh
-```
-
-### Resume an interrupted run
-
-```bash
-uv run dub resume --project-dir /path/to/dub-project/
-```
-
-## Installation (the standalone contract)
-
-### 1. Clone the repo
+### 1. clone repo
 
 ```bash
 git clone https://codeberg.org/killkli/video-dub-cli
 cd video-dub-cli
 ```
 
-### 2. Install the package with `uv`
-
-The package is a normal `pyproject.toml` project. `uv` is the supported
-install manager; it reads `uv.lock` and resolves a reproducible
-environment.
+### 2. 建立標準 dub 環境
 
 ```bash
-# For the canonical standalone stack (CLI + translation + ASR + VoxCPM TTS client):
 uv sync --extra all
-
-# For dev / test work:
-uv sync --extra dev
-
-# Bare CLI only (unit tests use this):
-uv sync
 ```
 
-`uv` will create a local `.venv/` and install:
+這個命令會建立 `.venv/`，並安裝：
 
-- the `dub` script
-- the `dub-doctor` and `dub-bootstrap` script entrypoints
-- all extras declared under `[project.optional-dependencies]`
-  (`translation`, `tts`, `asr`, `pipeline`, `dev`, `all`)
+- `dub` CLI
+- 本地 ASR 依賴
+- Gemini 翻譯依賴
+- VoxCPM client 依賴
 
-Verify the install:
-
-```bash
-uv run dub --help
-uv run dub doctor
-```
-
-> If you do not have `uv`, install it first:
-> `curl -LsSf https://astral.sh/uv/install.sh | sh`
-
-### 3. Install system tools
-
-`ffmpeg` and `ffprobe` are required for any real media run. `dub doctor`
-will tell you if they are missing.
+### 3. 安裝系統工具
 
 ```bash
 # macOS
@@ -155,331 +70,215 @@ brew install ffmpeg
 sudo apt-get install -y ffmpeg
 ```
 
-### 4. Set up the translation API key
-
-`dub run` with `--translate-mode delegate` (the default) calls Gemini
-for translation. The key is read from the environment; no key is
-baked into the repo.
+### 4. 設定 Gemini API key
 
 ```bash
-# Option A: export directly
 export GOOGLE_API_KEY=your_google_api_key
-
-# Option B: copy the example file and use a dotenv loader
-cp .env.example .env
-# edit .env, then `set -a; source .env; set +a` or use your loader
 ```
 
-`dub doctor` checks `GOOGLE_API_KEY` first and falls back to
-`GEMINI_API_KEY`; either works.
-
-### 5. Install the repo-owned ASR runtime
-
-The canonical ASR path is repo-owned and in-process. Stage 2 calls the
-vendored `qwenasr_mlx_cli` package under `src/`, not an external
-`qwenasr-mlx` binary on `$PATH`.
-
-Install the ASR runtime by syncing the repo extras:
-
-```bash
-uv sync --extra all
-```
-
-`dub doctor` then verifies the Python-side ASR gates (`py:qwen3_asr_mlx`,
-`py:soundfile`, `py:pydub`, `py:silero_vad`, `py:torchcodec`).
-
-## Quick start
-
-### 1. Confirm readiness
-
-```bash
-uv run dub doctor
-```
-
-A passing run reports every check as `OK` and per-backend readiness
-(`READY` / `BLOCKED`). A missing prerequisite shows up as `MISSING` or
-`BLOCKED` with the exact gate that failed.
-
-If something is missing, run:
-
-```bash
-uv run dub bootstrap
-```
-
-…and read the 7-line guidance. It points at the exact system tool, env
-var, repo-owned wrapper directory, or backend gate that needs attention.
-
-### 2. Prepare config
-
-Start from a canonical example config:
-
-```bash
-cp examples/config_delegate_en2zh.yaml /path/to/config.yaml
-```
-
-The example config ships with sensible defaults — most fields are
-optional. In the standalone contract, normal operators usually do not
-need to override any `paths.*` fields at all. Custom config is mainly
-for mix tuning, route selection, or legacy-compat parsing. See
-[Configuration](#configuration) for the full breakdown.
-
-### 3. Run the pipeline
-
-```bash
-uv run dub en2zh /path/to/input/my_talk.mp4
-```
-
-### 4. Inspect the final output
-
-```text
-/path/to/dub-project/07_final/video_dubbed_stem.mp4
-```
-
-## Configuration
-
-The config schema lives in `src/dub/config.py`. The default config that
-ships with the repo (no `--config` flag) is already valid for a fresh
-operator. You only need a custom config to override:
-
-- `defaults.vocal_gain` / `inst_gain` — to retune the mix
-- `defaults.keep_fulltrack` — to keep the original full track in the final mix
-- `translation.model` — to pin a specific Gemini model
-- `translation.api_env_var` — if you want to read a different env var name
-- legacy compatibility fields if you are intentionally replaying an old config
-
-Full schema (canonical: see `src/dub/config.py`):
-
-```yaml
-paths:
-  # Legacy compatibility only. Stage 2 is now repo-owned; operators do
-  # not normally need to set this. Kept so older configs still parse.
-  qwenasr_cli: null
-  # Legacy compatibility only. Stage 5 normally resolves the interpreter
-  # automatically; operators should not need to set this in the standard path.
-  omnivoice_python: python3
-  # Legacy compatibility only. Normal runtime uses repo-owned scripts.
-  skills_dir: <repo>/vendor/pipeline_scripts
-  # Legacy compatibility only. The standalone CLI translates in-process
-  # via translation.provider/model; this field is no longer read by any
-  # active stage. Kept on the schema for one release.
-  translation_skill: <repo>/src/dub/translator_gemini.py
-  # Where new project directories are created. Default:
-  # ~/video-dub-cli-runs/
-  dub_root: ~/video-dub-cli-runs/
-  # Advanced / legacy override only. Normal operators should leave the
-  # repo-owned default alone.
-  tts_engines_dir: <repo>/vendor/pipeline_scripts
-
-translation:
-  provider: gemini           # only "gemini" and "mock" are supported
-  model: gemini-2.5-flash
-  api_env_var: GOOGLE_API_KEY
-  temperature: 0.2
-  mode: delegate             # delegate | use-existing | skip
-
-defaults:
-  source_lang: en
-  target_lang: zh
-  vocal_gain: 3.0
-  inst_gain: -3.0
-  keep_fulltrack: false
-
-retry:
-  max_attempts: 3
-  backoff_seconds: 5
-  retry_on:
-    - subprocess.CalledProcessError
-    - TimeoutError
-    - ConnectionError
-
-logging:
-  level: INFO
-  json_logs: false
-  progress: rich
-```
-
-Most fields have safe defaults — see the [Configuration cheatsheet](#configuration-cheatsheet) for the short version.
-
-### Configuration cheatsheet
-
-| I want to… | Override this field |
-|---|---|
-| Change the Gemini model | `translation.model` |
-| Use a different API key env var | `translation.api_env_var` (e.g. `GEMINI_API_KEY`) |
-| Tune the dub/vocal mix | `defaults.vocal_gain`, `defaults.inst_gain` |
-| Keep the full original track in the final mix | `defaults.keep_fulltrack: true` |
-| Change where new project directories are created | `paths.dub_root` |
-| Parse an old config that still mentions an ASR CLI path | `paths.qwenasr_cli` (legacy compatibility only) |
-| Replay an old config that pins a Python path for TTS | `paths.omnivoice_python` (legacy compatibility only) |
-| Replay an old config that pins wrapper directories | `paths.skills_dir`, `paths.tts_engines_dir` (legacy compatibility only) |
-
-## ASR runtime
-
-There is no longer a separate operator-facing `qwenasr-mlx` install step
-in the canonical workflow. The supported path is:
-
-```bash
-uv sync --extra all
-uv run dub doctor
-```
-
-If `dub doctor` reports a missing ASR Python dependency, fix the dub venv
-itself rather than installing a second CLI elsewhere.
-
-`paths.qwenasr_cli` remains in the config schema only so older YAML files
-continue to parse; the current Stage 2 runtime does not read it.
-
-## Core commands
-
-| Command | Purpose |
-|---|---|
-| `dub en2zh VIDEO [OPTIONS]` | Run the common English → Chinese one-shot operator flow |
-| `dub ja2zh VIDEO [OPTIONS]` | Run the common Japanese → Chinese one-shot operator flow |
-| `dub run VIDEO --source-lang <lang> --target-lang zh [OPTIONS]` | Advanced/base entrypoint for explicit language control |
-| `dub resume --project-dir <project-dir>` | Continue a previous (interrupted or partially failed) run |
-| `dub status --project-dir <project-dir>` | Print per-stage status |
-| `dub clean --project-dir <project-dir> [--stage N]` | Remove stage outputs (preserve source by default) |
-| `dub validate --project-dir <project-dir>` | Verify final MP4 contract |
-| `dub doctor [--config CONFIG]` | Readiness check (prerequisites, per-backend readiness) |
-| `dub bootstrap` | Print bootstrap guidance for env / tools / backend prep |
-
-Common `dub run` options:
-
-- `--project-dir`
-- `--config`
-- `--translate-mode delegate|skip|use-existing`
-- `--translated-srt`
-- `--vocal_gain` / `--inst_gain`
-- `--keep_fulltrack`
-- `--yes`
-
-## Translation modes
-
-### `delegate` (default)
-Use the built-in translation stage. Reads the API key from the env
-(`GOOGLE_API_KEY` / `GEMINI_API_KEY`), calls Gemini, writes the
-translated SRT.
-
-Good for: fresh projects, normal CLI-driven translation flow.
-
-### `use-existing`
-Use a pre-existing translated subtitle file. Requires
-`--translated-srt /path/to/file.srt`.
-
-Good for: reviewed translations, external subtitle workflows,
-deterministic reruns.
-
-### `skip`
-Skip the translation stage and reuse the translated subtitle already
-stored inside the project. Requires a prior `delegate` or
-`use-existing` run; the canonical path
-`<project>/05_translated_srt/video.zhtw.srt` must already exist.
-
-## Project layout
-
-A run creates a project directory like:
-
-```text
-dub-<topic>-<timestamp>/
-├── 01_raw_video/
-├── 02_stems/
-├── 03_asr/
-├── 04_ref_audio/
-├── 05_translated_srt/
-├── 06_tts_wav/
-├── 07_final/
-└── .dub/state.json
-```
-
-This layout is the basis for resumability, validation, and recovery.
-See `docs/operator-runbook.md` for the failure-recovery procedures that
-read this state.
-
-## API key setup
-
-The `delegate` translation mode calls Gemini. The key is read from the
-environment at run time — never from a hard-coded file in the repo.
-
-| Env var | Honored? | Notes |
-|---|---|---|
-| `GOOGLE_API_KEY` | yes (primary) | Set this if you only need one |
-| `GEMINI_API_KEY` | yes (fallback) | Used only if `GOOGLE_API_KEY` is unset |
-
-Set it in your shell, your dotfiles, or your CI environment. `dub
-doctor` reports which env var (if any) it found.
-
-For a local `.env` style workflow, copy `.env.example` to `.env` and
-source it in your shell before invoking `dub run`:
+或：
 
 ```bash
 cp .env.example .env
-# edit .env to put your real key
+# 編輯 .env 後載入
 set -a; source .env; set +a
+```
+
+### 5. 驗證標準環境
+
+```bash
+uv run dub --help
+uv run dub doctor
+```
+
+---
+
+## OmniVoice 的正式做法
+
+OmniVoice **不再使用 `DUB_OMNIVOICE_ROOT`**。
+
+目前正式做法是：
+
+```bash
+uv run dub bootstrap-omnivoice
+```
+
+這個命令會自動：
+
+1. 建立 OmniVoice 專用 venv
+2. 安裝 `video-dub-cli[tts-omnivoice]`
+3. 把 `paths.omnivoice_python` 寫入設定檔
+
+若你的設定檔不在預設位置：
+
+```bash
+uv run dub bootstrap-omnivoice --config /path/to/config.yaml
+```
+
+完成後可再驗證：
+
+```bash
+uv run dub doctor --config /path/to/config.yaml
+```
+
+當 `tts_backends.omnivoice` 顯示 `READY`，代表 OmniVoice 路線已可用。
+
+---
+
+## 主要命令
+
+### 一鍵流程
+
+```bash
 uv run dub en2zh talk.mp4
+uv run dub ja2zh anime.mp4
 ```
 
-## Documentation
-
-- `QUICKSTART.md` — 5-minute happy-path walkthrough
-- `DESIGN.md` — design notes
-- `docs/standalone-dependency-map.md` — what is and is not self-contained (T1)
-- `docs/qa-standalone-matrix.md` — fresh-operator install / usage matrix (T6)
-- `docs/operator-runbook.md` — failure recovery guide
-- `docs/tts-backend-consolidation.md` — TTS adapter contract (T5)
-- `docs/release-handoff-checklist.md`
-- `docs/qa-matrix-en-ja-zh-2026-06-02.md`
-
-## Testing
-
-Run the main suite:
+### 進階入口
 
 ```bash
-uv run pytest
+uv run dub run talk.mp4 --source-lang en --target-lang zh
 ```
 
-Run only the unit / CLI / contract tests (skips integration):
+### 使用既有翻譯字幕
 
 ```bash
-uv run pytest tests/ -q --ignore=tests/integration
+uv run dub run talk.mp4 \
+  --source-lang en \
+  --target-lang zh \
+  --translate-mode use-existing \
+  --translated-srt talk.zhtw.srt
 ```
 
-Run the integration suite (requires real ASR / TTS / ffmpeg and an
-API key):
+### 續跑
 
 ```bash
-uv run pytest tests/integration -m integration
+uv run dub resume --project-dir /path/to/project
 ```
 
-## Known limits and open risks
-
-The standalone contract is structurally achieved (verified by T6), but
-some pieces are still operator-graded:
-
-- **Demucs model download on first run** (R2 in the dep map). `dub
-  bootstrap` does not prefetch the model. The first real run will
-  download it.
-- **TTS in-process import** (R1). Stage 5 still shells out to
-  `dubbing_batch_tts*.py` wrappers. The adapter registry is in-repo
-  (`src/dub/tts_engines/`), and `dub doctor` reports per-backend
-  readiness, but moving the actual call in-process is a follow-up.
-- **TTS backend consolidation** (R1/R5 follow-up). ASR is now repo-owned,
-  but TTS still carries the remaining integration debt: OmniVoice still has
-  an interpreter split story, and VoxCPM still depends on a local service.
-
-## Development
+### 查看狀態
 
 ```bash
-uv sync --extra dev
-uv run pytest
-uv run ruff check src/ tests/
-uv run mypy src/
+uv run dub status --project-dir /path/to/project
 ```
 
-Package metadata:
-- package: `video-dub-cli`
-- CLI entrypoints: `dub`, `dub-doctor`, `dub-bootstrap`
-- version: `0.1.0`
+### 驗證產物
 
-## License
+```bash
+uv run dub validate --project-dir /path/to/project
+```
 
-MIT
+### 清理後重跑
+
+```bash
+uv run dub clean --project-dir /path/to/project
+uv run dub resume --project-dir /path/to/project
+```
+
+---
+
+## `dub doctor` 會檢查什麼
+
+目前 `dub doctor` 會直接檢查：
+
+- `ffmpeg`
+- `ffprobe`
+- `repo_pipeline_scripts`
+- `gemini_api_key`
+- `py:qwen3_asr_mlx`
+- `py:soundfile`
+- `py:pydub`
+- `py:silero_vad`
+- `py:google_genai`
+- `py:torchcodec`
+- `tts_backends.omnivoice`
+- `tts_backends.voxcpme`
+
+另外它也會：
+
+- 在 Hermes / CI shell 下，嘗試從 `~/.zshrc` / `~/.bashrc` 自動復原 `GOOGLE_API_KEY` / `GEMINI_API_KEY`
+- 逐項列出 OmniVoice / VoxCPM 的 gate（wrapper / interpreter / deps / service）
+
+注意：
+
+- `doctor ok` 代表**標準 operator 路線可跑**
+- 即使 OmniVoice 顯示 `BLOCKED`，只要標準 `en2zh` / `ja2zh` 路線可跑，整體 doctor 仍可能通過
+- 若要讓 OmniVoice 變成 `READY`，請跑 `dub bootstrap-omnivoice`
+
+---
+
+## 專案輸出結構
+
+每次執行都會把產物存成可續跑的專案結構：
+
+- `01_raw_video/`
+- `02_stems/`
+- `03_asr/`
+- `04_ref_audio/`
+- `05_translate/`
+- `05_translated_srt/`
+- `06_tts_wav/`
+- `07_final/`
+- `.dub/state.json`
+- `.dub/*.log`
+
+最終影片位置通常是：
+
+```text
+<project>/07_final/video_dubbed_stem.mp4
+```
+
+---
+
+## 設定檔原則
+
+多數 operator 不需要手動改 `paths.*`。
+
+常見情況只需要：
+
+- 複製範例設定檔
+- 設定 API key
+- 需要 OmniVoice 時再跑 `dub bootstrap-omnivoice`
+
+推薦起點：
+
+```bash
+mkdir -p ~/.config/dub
+cp examples/config_en2zh.yaml ~/.config/dub/config.yaml
+```
+
+若要建立 OmniVoice 路線：
+
+```bash
+uv run dub bootstrap-omnivoice --config ~/.config/dub/config.yaml
+```
+
+---
+
+## 文件索引
+
+- `QUICKSTART.md`：5 分鐘上手
+- `docs/operator-runbook.md`：故障排除與恢復流程
+- `docs/operator-qa-real-backend-en2zh-2026-06-03.md`：英文→中文真實驗證紀錄
+- `docs/operator-qa-real-backend-ja2zh-2026-06-03.md`：日文→中文真實驗證紀錄
+- `docs/standalone-dependency-map.md`：依賴地圖
+
+---
+
+## 目前可以誠實宣稱的範圍
+
+### 已驗證
+- `uv sync --extra all`
+- `uv run dub doctor`
+- `uv run dub bootstrap`
+- `uv run dub bootstrap-omnivoice`
+- `uv run dub en2zh ...`
+- `uv run dub ja2zh ...`
+- `dub resume / status / validate / clean`
+
+### 不應過度宣稱
+- 不是所有 TTS backend 都在同一個 Python 環境內完成安裝
+- OmniVoice 仍採「標準 dub venv + 專用 OmniVoice venv」雙環境契約
+- VoxCPM 仍需要本機服務可用
+
+這是目前已驗證、可維運、可交付的 operator contract。

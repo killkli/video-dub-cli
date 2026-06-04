@@ -1,417 +1,396 @@
-# Operator Runbook — Failure Recovery Guide
+# Operator Runbook｜故障排除與恢復指南
 
-**Date:** 2026-06-03
-**Scope:** Recovery procedures for the `video-dub-cli` pipeline on
-the standalone clone+uv contract.
-**Reference QA matrices:**
-- `docs/qa-matrix-en-ja-zh-2026-06-02.md` (en/ja route coverage)
-- `docs/qa-standalone-matrix.md` (standalone install / usage matrix)
+**日期：** 2026-06-04  
+**適用範圍：** `video-dub-cli` 的正式操作工作流  
+**前提：** 本文件以目前已驗證的標準契約為準：
 
-This runbook assumes the standalone install path (`uv sync` from a fresh
-clone). If you are on a legacy venv install, the commands work the same
-way — just drop the `uv run` prefix.
+- `uv sync --extra all`
+- `uv run dub doctor`
+- `uv run dub en2zh ...` / `uv run dub ja2zh ...`
+- OmniVoice 若要啟用，另外跑 `uv run dub bootstrap-omnivoice`
 
 ---
 
-## Pre-flight: `dub doctor` and `dub bootstrap`
-
-Before debugging a specific failure, confirm the standalone contract
-holds on this host.
+## 0. 任何問題，先做這兩步
 
 ```bash
 uv run dub doctor
-```
-
-A passing run reports each prerequisite as `OK` and per-backend TTS
-readiness as `READY`. A failing run prints `MISSING` / `BLOCKED` lines
-naming the exact gate that failed.
-
-If anything is missing or blocked, the 6-line guidance is:
-
-```bash
 uv run dub bootstrap
 ```
 
-That text points at the exact system tool, env var, repo-owned wrapper
-directory, or TTS backend that needs attention. Fix the named gate, then
-re-run `dub doctor`.
+判讀原則：
 
----
+- `MISSING`：缺少必要項目
+- `BLOCKED`：某條 backend 路線尚未就緒
+- `READY`：該 backend 路線可用
 
-## Reading Pipeline State
-
-### `.dub/state.json`
-
-Each project has a `.dub/state.json` at the project root. Key fields:
-
-```json
-{
-  "input": {
-    "source_lang": "en",
-    "target_lang": "zh",
-    "translate_mode": "delegate",
-    "project_dir": "/path/to/project"
-  },
-  "stages": {
-    "01_stems":    { "status": "done",    "attempts": 1 },
-    "02_asr":      { "status": "done",    "attempts": 1 },
-    "03_ref_audio":{ "status": "done",    "attempts": 1 },
-    "04_translate":{ "status": "done",    "attempts": 1 },
-    "05_tts":      { "status": "failed",  "attempts": 1, "error": "OOM" },
-    "06_assemble": { "status": "pending", "attempts": 0 }
-  }
-}
-```
-
-**Stage status values:** `pending` | `running` | `done` | `failed` | `skipped`
-
-To read the current state:
+如果你是 OmniVoice 問題，再補跑：
 
 ```bash
-cat .dub/state.json | python3 -m json.tool
-```
-
-### `.dub/<stage>.log`
-
-Each stage writes a log file to `.dub/` when it runs:
-
-```
-.dub/01_stems.log
-.dub/02_asr.log
-.dub/03_ref_audio.log
-.dub/04_translate.log
-.dub/05_tts.log
-.dub/06_assemble_step1_tts.log
-.dub/06_assemble_remix.log
-```
-
-To see the last 30 lines of any stage log:
-
-```bash
-tail -30 .dub/05_tts.log
-```
-
-To see errors only:
-
-```bash
-grep -i error .dub/05_tts.log
+uv run dub bootstrap-omnivoice --config ~/.config/dub/config.yaml
 ```
 
 ---
 
-## Choosing `resume` vs `clean --stage N`
+## 1. 如何看專案狀態
 
-| Situation | Command |
-|-----------|---------|
-| Pipeline stopped mid-run (stage status = `running`) | `uv run dub resume` |
-| A specific stage failed but earlier stages are fine | `uv run dub clean --project-dir <path> --stage <N>` then `uv run dub resume` |
-| Want to re-run from scratch without touching source | `uv run dub clean --project-dir <path>` then re-run `uv run dub run` |
+每個專案都會有：
 
-**Rule of thumb:**
-- If the pipeline was killed or crashed mid-stage → `resume`
-- If a stage completed but produced corrupt/bad output → `clean --stage N` + `resume`
-- If you want to re-run everything downstream of a specific stage → `clean --stage N` + `resume`
-- Never `clean` the source video (`01_raw_video/`) unless you want to delete the source
+- `.dub/state.json`
+- `.dub/*.log`
+
+### 常用檢查命令
+
+```bash
+uv run dub status --project-dir /path/to/project
+uv run dub validate --project-dir /path/to/project
+```
+
+### 若要直接看 state
+
+```bash
+python3 -m json.tool /path/to/project/.dub/state.json
+```
+
+### 若要看某個 stage 的 log
+
+```bash
+tail -30 /path/to/project/.dub/05_tts.log
+```
 
 ---
 
-## Four Most Common Failure Modes
+## 2. 什麼時候用 `resume`，什麼時候用 `clean`
 
-### FR-1: `use-existing` without `--translated-srt`
+### 用 `resume`
+適合：
+- 執行中斷
+- stage 跑到一半中止
+- process 被殺掉
 
-**Exact error:**
+```bash
+uv run dub resume --project-dir /path/to/project
 ```
+
+### 用 `clean --stage N` + `resume`
+適合：
+- 某個 stage 已完成，但產物有問題
+- 你想重跑某個 stage 之後的內容
+
+```bash
+uv run dub clean --project-dir /path/to/project --stage 6
+uv run dub resume --project-dir /path/to/project
+```
+
+### 全部重跑但保留 source video
+
+```bash
+uv run dub clean --project-dir /path/to/project
+uv run dub en2zh /path/to/input/talk.mp4
+```
+
+---
+
+## 3. 最常見的錯誤情境
+
+### FR-1：`use-existing` 但沒給 `--translated-srt`
+
+**錯誤訊息**
+
+```text
 translate-mode=use-existing requires --translated-srt
 ```
 
-**Cause:** Used `--translate-mode use-existing` but did not provide `--translated-srt <path>`.
+**處理方式**
 
-**Recovery:**
 ```bash
-uv run dub run <video> \
+uv run dub run talk.mp4 \
   --source-lang en \
   --target-lang zh \
   --translate-mode use-existing \
-  --translated-srt /path/to/your/translated.srt
+  --translated-srt /path/to/talk.zhtw.srt
 ```
 
 ---
 
-### FR-2: `use-existing` with non-existent `--translated-srt` path
+### FR-2：`--translated-srt` 指到不存在的檔案
 
-**Exact error:**
+**錯誤訊息**
+
+```text
+translated SRT not found: /path/to/file.srt
 ```
-translated SRT not found: /nonexistent/path.srt
-```
 
-**Cause:** The file at `--translated-srt` does not exist.
+**處理方式**
 
-**Recovery:**
+先確認檔案存在，再重跑：
+
 ```bash
-# Verify the path exists:
-ls -la /path/to/your/translated.srt
-
-# Re-run with correct path:
-uv run dub run <video> \
+uv run dub run talk.mp4 \
   --source-lang en \
   --target-lang zh \
   --translate-mode use-existing \
-  --translated-srt /correct/path/to/translated.srt
+  --translated-srt /correct/path/to/talk.zhtw.srt
 ```
 
 ---
 
-### FR-3: `skip` on fresh project (no prior translated SRT)
+### FR-3：在全新專案上用 `--translate-mode skip`
 
-**Exact error:**
+**錯誤訊息**
+
+```text
+translate-mode=skip requires an existing translated subtitle at <project>/05_translated_srt/video.zhtw.srt
 ```
-translate-mode=skip requires an existing translated subtitle at <project_dir>/05_translated_srt/video.zhtw.srt
-```
 
-**Cause:** Used `--translate-mode skip` on a project that has never run the translate stage. There is no `05_translated_srt/video.zhtw.srt` yet.
+**原因**
 
-**Recovery:** Choose the correct mode for your situation:
+你要求跳過翻譯，但專案裡根本還沒有既有的中文字幕。
+
+**處理方式**
+
+如果你有現成字幕，用：
 
 ```bash
-# Option A: use use-existing if you have an external translation
-uv run dub run <video> \
+uv run dub run talk.mp4 \
   --source-lang en \
   --target-lang zh \
   --translate-mode use-existing \
-  --translated-srt /path/to/translated.srt
-
-# Option B: let CLI translate (delegate mode, default)
-uv run dub en2zh <video>
-
-# Advanced/base entrypoint (explicit language control)
-uv run dub run <video> --source-lang en --target-lang zh
+  --translated-srt /path/to/talk.zhtw.srt
 ```
 
----
+如果沒有，就直接走預設翻譯：
 
-### FR-4: Stage 5 (TTS) OOM or subprocess crash
-
-**Symptoms:** Stage 5 halts with `status: failed`, `error: OOM` or similar in `.dub/05_tts.log`.
-
-**Recovery:**
 ```bash
-# Step 1: check current state
-uv run dub status --project-dir <path>
-
-# Step 2: resume — re-enters at the failed stage
-uv run dub resume --project-dir <path>
+uv run dub en2zh talk.mp4
 ```
-
-The TTS stage has built-in per-line recovery: if some `line_<i>_tts.wav` files are missing or undersized after a failure, the stage will re-invoke TTS scoped to each missing cue via `--start N --end N`.
 
 ---
 
-### FR-5: Stage 6 (assemble) ffprobe failure
+### FR-4：Stage 5 TTS 失敗或中途崩潰
 
-**Symptoms:** Stage 6 halts with `status: failed`. ffprobe cannot read the output MP4, or the subprocess exited non-zero.
+**症狀**
 
-**Recovery:**
+- `status` 顯示 `05_tts: failed`
+- `.dub/05_tts.log` 有錯誤
+
+**處理方式**
+
+先試：
+
 ```bash
-# Step 1: check state
-uv run dub status --project-dir <path>
-
-# Step 2: clean only stage 6 artifacts (keeps earlier stages intact)
-uv run dub clean --project-dir <path> --stage 6
-
-# Step 3: resume
-uv run dub resume --project-dir <path>
+uv run dub resume --project-dir /path/to/project
 ```
 
-`--stage 6` only removes artifacts from `07_final/`. Your earlier stages (`01_stems` through `06_tts_wav`) are preserved.
+若仍失敗，再看 `.dub/05_tts.log` 判斷是哪一條 backend 出問題。
 
 ---
 
-## New failure modes added by the standalone contract
+### FR-5：Stage 6 組裝失敗
 
-### FR-6: `dub doctor` reports `repo_pipeline_scripts: MISSING`
+**症狀**
 
-**Symptom:**
+- `06_assemble` 或最終輸出失敗
+- ffprobe / ffmpeg 報錯
+
+**處理方式**
+
+```bash
+uv run dub clean --project-dir /path/to/project --stage 6
+uv run dub resume --project-dir /path/to/project
 ```
+
+這只會清掉最終輸出，不會動到前面的 ASR / 翻譯 / TTS 產物。
+
+---
+
+## 4. 與目前 standalone 契約直接相關的錯誤
+
+### FR-6：`repo_pipeline_scripts: MISSING`
+
+**症狀**
+
+```text
 repo_pipeline_scripts: MISSING (...)
 ```
 
-**Cause:** the repo-owned wrapper directory could not be found. In the
-normal standalone contract this should resolve to `vendor/pipeline_scripts`
-inside the checked-out repo. This is a repo/worktree problem, not an
-operator backend-install problem.
+**原因**
 
-**Recovery:**
+repo 內建的 `vendor/pipeline_scripts/` 沒被正確找到。
+
+**處理方式**
+
 ```bash
-# From the repo root, confirm the vendored wrappers exist
-ls vendor/pipeline_scripts/
-
-# Re-run doctor from the checked-out repo / uv project
 uv run dub doctor
 ```
 
-If you are running a hermetic test harness, it may intentionally override
-this location via `DUB_PIPELINE_SCRIPTS_DIR`. That environment variable is
-**test-only** and not part of the normal operator setup.
+若仍有問題，確認 repo 內容完整，並從 repo 根目錄執行。
 
-If the directory is genuinely missing from your checkout, restore it from git:
-```bash
-git checkout -- vendor/pipeline_scripts
-uv run dub doctor
-```
-
-Note: `paths.qwenasr_cli` still exists in config only as a legacy
-backward-compatibility field. `dub doctor` no longer uses it as an operator
-readiness gate.
+這通常是 checkout / worktree 問題，不是 operator 設定問題。
 
 ---
 
-### FR-7: `dub doctor` reports `gemini_api_key: MISSING`
+### FR-7：`gemini_api_key: MISSING`
 
-**Symptom:**
-```
+**症狀**
+
+```text
 gemini_api_key: MISSING (GOOGLE_API_KEY,GEMINI_API_KEY)
 ```
 
-**Cause:** No Gemini API key is in the environment. `--translate-mode
-delegate` (the default) requires one.
-
-**Recovery:**
-```bash
-# Option A: direct export
-export GOOGLE_API_KEY=*** # Option B: .env style
-cp .env.example .env
-# edit .env to put your real key
-set -a; source .env; set +a
-uv run dub doctor    # should show gemini_api_key: OK (GOOGLE_API_KEY)
-```
-
-If you do not want to set a Gemini key, switch to
-`--translate-mode use-existing` with a pre-translated SRT (FR-1 / FR-2).
-
----
-
-### FR-8: `dub doctor` reports a TTS backend as `BLOCKED`
-
-**Symptom:**
-```
-tts_backends:
-  omnivoice: BLOCKED (missing: deps:torch)
-  voxcpme:   BLOCKED (missing: deps:gradio_client, deps:opencc)
-```
-
-**Cause:** A TTS backend's dependencies are not satisfied in the active
-Python interpreter.
-
-**Recovery:** Each gate (wrapper / interpreter / deps / service) is
-listed individually. The fix depends on which gate failed:
-
-- `missing: deps:torch` → install `torch` (and `omnivoice`) in the
-  Python at `paths.omnivoice_python` (default: the dub venv's
-  `python3`).
-- `missing: deps:gradio_client` / `deps:opencc` → `uv pip install
-  gradio_client opencc-python-reimplemented` in the dub venv.
-- `missing: service` → the named backend's local server is not
-  running. For VoxCPM, start a local server on 127.0.0.1:8808 first.
-
-You can also run the pipeline without a specific TTS backend by
-choosing a different one in your config (see
-`docs/tts-backend-consolidation.md`).
-
----
-
-## Known Fragility (from T3 research)
-
-These coupling weaknesses are known and not yet hardened:
-
-### Weakness 1 — `source_lang` is dual-role but not locked per project
-
-`source_lang` simultaneously controls ASR language and TTS script route. If you resume a project with a different config (or a future version adds a new language route), the pipeline may re-enter with a different ASR language or TTS script, causing inconsistency with already-existing artifacts.
-
-**Operational mitigation:** Always use the same `--source-lang` when resuming a project. Do not mix `--source-lang en` first-run with `--source-lang ja` resume.
-
-### Weakness 2 — `TranslationConfig.provider` is a weak contract
-
-The config field `provider: gemini` looks like a configurable route,
-but the stage code does not dispatch on it — it always calls
-`translate_srt_file` (Gemini) unless `provider == "mock"`. Switching
-to another backend via config will not work as expected.
-
-**Operational mitigation:** Do not change `translation.provider` in config — only `gemini` and `mock` are supported.
-
-### Weakness 3 — Dual translated SRT paths
-
-Canonical path: `05_translated_srt/video.zhtw.srt`
-Legacy compat copy: `05_translate/video.zhtw.srt`
-
-Both are written by the translate stage. `validate` and `skip` only check the canonical path. The compat copy exists for legacy tool compatibility and may be removed in future versions without notice.
-
-**Operational mitigation:** Treat `05_translated_srt/video.zhtw.srt` as the only stable contract. Do not reference `05_translate/video.zhtw.srt` in external tooling.
-
----
-
-## Open risks from the standalone consolidation (T1 / T5 / T6)
-
-These are tracked in `docs/standalone-dependency-map.md` and
-`docs/qa-standalone-matrix.md`. They do not block standalone usage
-today, but operators should be aware:
-
-- **R1 — TTS in-process import.** Stage 5 still shells out to
-  `dubbing_batch_tts*.py` wrappers. The adapter registry is in-repo
-  (`src/dub/tts_engines/`) and `dub doctor` reports per-backend
-  readiness, but the next consolidation pass is moving the actual call
-  in-process.
-- **R2 — Demucs model download on first run.** `dub bootstrap` does
-  not prefetch the Demucs model. The first real run will download it.
-- **R5 — qwenasr-mlx PyPI story.** Until `qwenasr-mlx` ships on PyPI,
-  install via `pipx` from git (see FR-6).
-
----
-
-## Quick Reference: CLI Commands
+**處理方式**
 
 ```bash
-# Run pipeline (common operator path)
-uv run dub en2zh <video>
-
-# Advanced/base entrypoint
-uv run dub run <video> --source-lang en --target-lang zh
-
-# Check status
-uv run dub status --project-dir <path>
-
-# Validate outputs
-uv run dub validate --project-dir <path>
-
-# Resume after failure
-uv run dub resume --project-dir <path>
-
-# Clean stage N then resume
-uv run dub clean --project-dir <path> --stage N
-uv run dub resume --project-dir <path>
-
-# Full clean (keeps source video)
-uv run dub clean --project-dir <path>
-
-# Read state
-cat .dub/state.json | python3 -m json.tool
-
-# Tail a stage log
-tail -30 .dub/05_tts.log
-
-# Pre-flight readiness check
+export GOOGLE_API_KEY=your_google_api_key
 uv run dub doctor
+```
 
-# 6-line bootstrap guidance
+或：
+
+```bash
+cp .env.example .env
+set -a; source .env; set +a
+uv run dub doctor
+```
+
+如果你把 key 寫在 `~/.zshrc`，`dub doctor` 也可能自動復原並顯示：
+
+```text
+note: auto-recovered ...
+```
+
+---
+
+### FR-8：`omnivoice: BLOCKED`
+
+**症狀**
+
+```text
+tts_backends:
+  omnivoice: BLOCKED (...)
+```
+
+**這不一定是錯。**
+
+如果你現在只是跑標準 `en2zh` / `ja2zh` 流程，而不是強制要用 OmniVoice，整體流程仍可能可用。
+
+**若你真的要啟用 OmniVoice**
+
+請跑：
+
+```bash
+uv run dub bootstrap-omnivoice --config ~/.config/dub/config.yaml
+uv run dub doctor --config ~/.config/dub/config.yaml
+```
+
+目標是讓你看到：
+
+```text
+omnivoice: READY
+```
+
+---
+
+### FR-9：`voxcpme: BLOCKED`
+
+**常見原因**
+
+- `gradio_client` / `opencc` 缺失
+- 本機 VoxCPM 服務沒起來
+- 127.0.0.1:8808 無法連線
+
+**處理方式**
+
+先跑：
+
+```bash
+uv run dub doctor
+```
+
+看它缺的是：
+
+- `deps:gradio_client`
+- `deps:opencc`
+- `service`
+
+如果是 service，代表 Python 套件已經有了，但 VoxCPM server 沒起來。
+
+---
+
+## 5. 關於 OmniVoice 的新規則
+
+以下規則以目前版本為準：
+
+### 已廢棄
+- `DUB_OMNIVOICE_ROOT`
+- 額外 clone 一份 OmniVoice repo 才能讓 CLI 認得它
+
+### 目前正式做法
+- OmniVoice code 已 vendor 進 repo
+- OmniVoice heavy deps 不跟標準 dub venv 混裝
+- 用 `dub bootstrap-omnivoice` 建立獨立 venv
+- `paths.omnivoice_python` 指向該 venv 的 Python
+
+這是目前已驗證、也最不容易讓 operator 出錯的做法。
+
+---
+
+## 6. 建議的故障排除順序
+
+遇到任何問題，請依序做：
+
+### 第一步：看 readiness
+
+```bash
+uv run dub doctor
+```
+
+### 第二步：看 bootstrap 指引
+
+```bash
 uv run dub bootstrap
 ```
 
-> On a legacy venv install (not the standalone uv contract), drop the
-> `uv run` prefix — the commands are otherwise identical.
+### 第三步：若是 OmniVoice，建立專用環境
+
+```bash
+uv run dub bootstrap-omnivoice --config ~/.config/dub/config.yaml
+```
+
+### 第四步：看專案狀態
+
+```bash
+uv run dub status --project-dir /path/to/project
+uv run dub validate --project-dir /path/to/project
+```
+
+### 第五步：看 `.dub/*.log`
+
+重點先看：
+
+- `.dub/02_asr.log`
+- `.dub/04_translate.log`
+- `.dub/05_tts.log`
+- `.dub/06_assemble_step1_tts.log`
+- `.dub/06_assemble_remix.log`
 
 ---
 
-## Full QA Matrices
+## 7. 目前可以信任的操作面
 
-For the complete test matrix see:
-- `docs/qa-matrix-en-ja-zh-2026-06-02.md` — en/ja route scenarios (Rows 1–5) and failure-recovery scenarios (FR-1 through FR-5)
-- `docs/qa-standalone-matrix.md` — fresh-operator install / usage matrix (T6) and the new FR-6 / FR-7 / FR-8 from the standalone contract
+以下命令都已經納入目前 operator contract：
+
+```bash
+uv sync --extra all
+uv run dub doctor
+uv run dub bootstrap
+uv run dub bootstrap-omnivoice
+uv run dub en2zh <VIDEO>
+uv run dub ja2zh <VIDEO>
+uv run dub resume --project-dir <DIR>
+uv run dub status --project-dir <DIR>
+uv run dub validate --project-dir <DIR>
+uv run dub clean --project-dir <DIR>
+```
+
+如果文件內容與這些命令的真實輸出不同，應以命令實際輸出為準。
