@@ -5,54 +5,23 @@ dubbing_batch_tts.py — OmniVoice per-segment clone。
 輸出：每句配音 WAV（line_{i}_tts.wav）。
 
 用法：
-  DUB_OMNIVOICE_ROOT=/path/to/OmniVoice  # the OmniVoice dev repo checkout
-  source $DUB_OMNIVOICE_ROOT/.venv/bin/activate
-  PYTHONPATH=$DUB_OMNIVOICE_ROOT python3 dubbing_batch_tts.py \\
-    --zh-srt 04_translated_srt/video.srt \\
-    --en-srt 02_asr/video.srt \\
-    --ref-dir 03_ref_audio \\
+  python3 dubbing_batch_tts.py \
+    --zh-srt 04_translated_srt/video.srt \
+    --en-srt 02_asr/video.srt \
+    --ref-dir 03_ref_audio \
     --out-dir 05_tts_wav
 
-`DUB_OMNIVOICE_ROOT` is the only operator-supplied path the script
-needs (it points at the OmniVoice dev repo, which is not on PyPI
-yet — that's a documented bootstrap step, not a hidden repo
-coupling). If the env var is not set, the script refuses to run
-with a clear error instead of silently inserting a hard-coded
-fallback path that would only work on one developer's machine.
+This repo vendors the minimal OmniVoice inference package under
+`src/omnivoice`, so the script imports `omnivoice.models.omnivoice`
+directly from the installed `video-dub-cli` environment. No external
+OmniVoice checkout or `DUB_OMNIVOICE_ROOT` env var is required.
 """
 import argparse, os, sys, time
 from pathlib import Path
 
-# ── 載入 OmniVoice（須在 venv 環境內）────────────────────────────────────────
-# DUB_OMNIVOICE_ROOT is the operator-supplied env var. The legacy
-# OMNIVOICE_ROOT name is also accepted as a fallback for backwards
-# compatibility with existing operator shell scripts.
-# This guard runs BEFORE every heavy import (torch, torchaudio,
-# opencc, omnivoice.models.omnivoice) so a missing / wrong env
-# var produces a clear, scoped error instead of a confusing
-# ``ModuleNotFoundError`` from the wrong layer. argparse stays
-# at the top of the file because it is part of the Python
-# standard library and is required for the ``--help`` path.
-_OMNIVOICE_ROOT = os.environ.get("DUB_OMNIVOICE_ROOT") or os.environ.get("OMNIVOICE_ROOT")
-if not _OMNIVOICE_ROOT:
-    sys.stderr.write(
-        "dubbing_batch_tts.py: DUB_OMNIVOICE_ROOT is not set. "
-        "Point it at a checkout of the OmniVoice dev repo "
-        "(the package is not on PyPI yet). "
-        "Run `dub bootstrap` for the full instructions.\n"
-    )
-    sys.exit(2)
-OMNIROOT = Path(_OMNIVOICE_ROOT).expanduser().resolve()
-if not (OMNIROOT / "omnivoice" / "models" / "omnivoice.py").is_file():
-    sys.stderr.write(
-        f"dubbing_batch_tts.py: DUB_OMNIVOICE_ROOT={OMNIROOT} does not look "
-        f"like a valid OmniVoice checkout (missing omnivoice/models/omnivoice.py). "
-        f"Run `dub bootstrap` for the full instructions.\n"
-    )
-    sys.exit(2)
-sys.path.insert(0, str(OMNIROOT))
-
-# Heavy model stack — only imported after the env-var guard passes.
+# ── 載入 OmniVoice（須在已安裝 video-dub-cli 的 venv 內）────────────────────
+# Heavy model stack — imported only when the script actually runs,
+# not when the wrapper module is imported by `dub doctor`.
 from opencc import OpenCC  # noqa: E402
 import torch  # noqa: E402
 import torchaudio  # noqa: E402

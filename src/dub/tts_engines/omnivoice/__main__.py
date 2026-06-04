@@ -7,15 +7,12 @@ to the vendored heavy-lift script
 
 This is the canonical invocation path for a fresh operator: the
 runner resolves the vendored script inside the repo (no separate
-``skills_dir`` configuration, no external skill clone), and the
-heavy OmniVoice model stack comes in via the ``[tts-omnivoice]``
-extra (``torch`` + ``torchaudio`` + the ``omnivoice`` package
-itself, once published). Until ``omnivoice`` lands on PyPI, an
-operator who wants the real OmniVoice route still needs to point
-``paths.omnivoice_root`` (or ``DUB_OMNIVOICE_ROOT``) at a checkout
-of the OmniVoice dev repo that contains a working
-``omnivoice.models.omnivoice`` import. ``dub doctor`` reports
-which boxes are unchecked.
+``skills_dir`` configuration, no external skill clone). The minimal
+``omnivoice`` inference package is vendored under ``src/omnivoice``
+in this repo, while the heavy OmniVoice runtime deps should live in
+whatever interpreter ``paths.omnivoice_python`` points at. ``dub doctor``
+verifies that interpreter can import both ``torch`` and
+``omnivoice.models.omnivoice``.
 """
 from __future__ import annotations
 

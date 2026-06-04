@@ -1,0 +1,9 @@
+Vendored OmniVoice subset license notice:
+
+Upstream project: OmniVoice
+Upstream repository: https://github.com/k2-fsa/OmniVoice
+Upstream commit copied from local checkout: a4068c820f21307df337e34f67d3dda443735ad4
+License: Apache License 2.0
+
+See the original upstream LICENSE for full terms. The copied source files in
+this directory retain their upstream copyright and license headers.

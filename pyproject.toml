@@ -11,7 +11,7 @@ license = { text = "MIT" }
 authors = [
     { name = "video-dub-cli maintainers" },
 ]
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.13"
 keywords = ["video", "dubbing", "tts", "asr", "translation", "ffmpeg"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -47,32 +47,33 @@ translation = [
     "google-genai>=1.0.0",
     "torchcodec>=0.13.0",
 ]
-# TTS / TTS-adjacent deps. The repo now owns the *adapter* and
-# *runner* code paths; the heavy model stacks are split into
-# per-backend optional extras so a fresh operator can pull in only
-# what they need. The base [tts] extra carries the small
-# dependency-light code (opencc + gradio_client) that the VoxCPM
-# route needs in the dub venv. OmniVoice and VoxCPM each have
-# their own extra for the heavier weights.
+# TTS / TTS-adjacent deps. The repo now owns the adapter, runner,
+# and the minimal vendored OmniVoice inference package under src/omnivoice.
+# The heavy model stacks are still split into per-backend optional extras
+# so a fresh operator can pull in only what they need. The base [tts]
+# extra carries the small dependency-light code (opencc + gradio_client)
+# that the VoxCPM route needs in the dub venv. OmniVoice and VoxCPM each
+# have their own extra for the heavier weights.
 #
 # Backend dep map:
-#   omnivoice → torch, torchaudio (+ the OmniVoice package, which
-#               is not on PyPI today; operators clone it to
-#               ~/Dev/OmniVoice and the script sys.path.insert's it
-#               at runtime — see vendor/pipeline_scripts/dubbing_batch_tts.py)
+#   omnivoice → vendored src/omnivoice package + torch, torchaudio,
+#               transformers, accelerate, numpy, pydub, soundfile
 #   voxcpme   → gradio_client, opencc (t2s only)
 tts = [
     "opencc-python-reimplemented>=0.1.7",
     "gradio_client>=0.16.0",
 ]
-# OmniVoice backend: torch + torchaudio. The OmniVoice package
-# itself is not pip-installable today; this extra makes sure the
-# dub venv has the torch stack OmniVoice needs, and the readiness
-# probe for the omnivoice backend verifies torch is importable.
+# OmniVoice backend: the model code is vendored in this repo, but the
+# runtime still needs the heavy inference deps below.
 tts-omnivoice = [
     "torch>=2.0.0",
     "torchaudio>=2.0.0",
     "torchcodec>=0.13.0",
+    "transformers==5.10.0",
+    "accelerate>=1.13.0",
+    "numpy>=1.26.0",
+    "pydub>=0.25.0",
+    "soundfile>=0.12.1",
 ]
 # VoxCPM backend: gradio_client + opencc for t2s. There is no
 # second Python interpreter to worry about — VoxCPM runs as a
@@ -81,14 +82,7 @@ tts-vox = [
     "gradio_client>=0.16.0",
     "opencc-python-reimplemented>=0.1.7",
 ]
-# Convenience meta-extra: every TTS dep the operator might need.
-# Does NOT include torch unless the operator also pulls in
-# [tts-omnivoice]; the omnivoice torch stack is large enough to
-# deserve its own explicit opt-in.
-tts-all = [
-    "opencc-python-reimplemented>=0.1.7",
-    "gradio_client>=0.16.0",
-]
+
 # ASR / audio stack (qwen-asr MLX). Pulls in numpy / torch-free paths.
 # torchcodec is the audio I/O shim required by torchaudio >= 2.9.
 asr = [
@@ -115,13 +109,12 @@ dev = [
     "mypy>=1.10.0",
     "ruff>=0.5.0",
 ]
-# All extras combined — convenient for an operator who wants the
-# canonical standalone path in one `uv sync --extra all` step.
-# This DOES include the ASR torch stack and the OmniVoice torch /
-# torchaudio deps, but it still does NOT make OmniVoice fully
-# self-contained because the `omnivoice` package itself is not on PyPI;
-# operators who want that backend still need an external checkout and
-# `DUB_OMNIVOICE_ROOT`. VoxCPM's client deps are already included here.
+# All extras combined for the canonical dub venv.
+# This intentionally excludes OmniVoice's transformers/accelerate stack,
+# because that stack conflicts with qwen3-asr-mlx in the same resolver.
+# Operators who want the OmniVoice backend should point
+# `paths.omnivoice_python` at a separate interpreter where
+# `uv sync --extra tts-omnivoice` has been installed.
 all = [
     "httpx>=0.27.0",
     "google-genai>=1.0.0",
@@ -149,9 +142,15 @@ dub-bootstrap = "dub.bootstrap:main"
 "Homepage" = "https://codeberg.org/killkli/video-dub-cli"
 "Bug Tracker" = "https://codeberg.org/killkli/video-dub-cli/issues"
 
+[tool.uv]
+conflicts = [
+    [{ extra = "all" }, { extra = "tts-omnivoice" }],
+    [{ extra = "asr" }, { extra = "tts-omnivoice" }],
+]
+
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["dub*", "qwenasr_mlx_cli*"]
+include = ["dub*", "qwenasr_mlx_cli*", "omnivoice*"]
 
 [tool.setuptools.package-data]
 dub = ["py.typed"]
@@ -180,5 +179,6 @@ ignore = ["E501"]
 
 # UV-first developer/operator contract.
 # - Developers sync dev tooling:        `uv sync --extra dev`
-# - Operators with all backends:        `uv sync --extra all`
+# - Operators (dub venv):               `uv sync --extra all`
+# - OmniVoice interpreter only:         `uv sync --extra tts-omnivoice`
 # - Bare CLI only (for unit tests):     `uv sync`

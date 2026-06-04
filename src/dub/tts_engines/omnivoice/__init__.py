@@ -12,19 +12,17 @@ The adapter's job is to:
   source languages that fall back to OmniVoice)
 - resolve the script path to the package runner (no more
   fall-through to a legacy ``skills_dir`` location)
-- pick the right interpreter (OmniVoice's own venv with torch +
-  omnivoice, or the dub venv as a fallback)
+- pick the right interpreter (configured OmniVoice Python, or the
+  dub venv as a fallback)
 - report readiness so ``dub doctor`` can tell the operator what
   is missing
 
-The actual heavy-lift script (``vendor/pipeline_scripts/dubbing_batch_tts.py``)
-remains vendored because it has non-trivial atomic-write
-contracts, ``--start/--end`` support, and per-cue error handling
-that we do not want to re-implement here. R1 in
-``docs/standalone-dependency-map.md`` captures the long-term
-target of inlining it into the package, but that requires the
-OmniVoice package to be importable from the dub venv — which is
-not a wave-12 deliverable.
+The actual heavy-lift script remains vendored because it has
+non-trivial atomic-write contracts, ``--start/--end`` support,
+and per-cue error handling that we do not want to re-implement here.
+The OmniVoice inference package itself is now vendored under
+``src/omnivoice`` from the upstream OmniVoice repo, so a fresh
+operator no longer needs an external OmniVoice checkout.
 """
 from __future__ import annotations
 
@@ -99,20 +97,17 @@ def build_route(config: DubConfig, source_lang: str = "en") -> ResolvedRoute:
 
 
 def readiness(config: DubConfig) -> TtsReadiness:
-    """Probe OmniVoice readiness. Five gates:
+    """Probe OmniVoice readiness. Four gates:
 
     1. wrapper — the package runner exists in the engines dir
     2. interpreter — the OmniVoice Python interpreter (or the dub
        venv as a fallback) exists and runs
-    3. env:DUB_OMNIVOICE_ROOT — the env var pointing at the OmniVoice
-       dev repo checkout is set and points at a real checkout
-       (the ``omnivoice`` package is not on PyPI, so operators
-       clone the dev repo and point the env var at it). This is
-       the only operator-supplied coupling the repo requires;
-       everything else flows through the package runner.
-    4. deps — torch is importable under that interpreter
-    5. model — we deliberately don't probe model cache here; that's
-       a bootstrap step, not a doctor gate.
+    3. deps:torch — torch is importable under that interpreter
+    4. deps:omnivoice — the vendored OmniVoice package is importable
+       under that interpreter
+
+    Model weights are deliberately not probed here; that's a bootstrap
+    / first-run download concern, not a doctor gate.
 
     Skipped gates (e.g. deps when interpreter is missing) are reported
     as ``skipped`` rather than ``missing`` so the operator can see
@@ -143,36 +138,7 @@ def readiness(config: DubConfig) -> TtsReadiness:
         ))
         interp = fallback
 
-    # Env-var gate: DUB_OMNIVOICE_ROOT (or legacy OMNIVOICE_ROOT)
-    # must point at a real OmniVoice checkout. This is the single
-    # operator-supplied coupling that is unavoidable today (the
-    # omnivoice package is not on PyPI). Report it as a first-class
-    # gate so operators see "missing env" instead of a confusing
-    # import error from the script itself.
-    omni_root = os.environ.get("DUB_OMNIVOICE_ROOT") or os.environ.get("OMNIVOICE_ROOT")
-    if not omni_root:
-        checks.append((
-            "env:DUB_OMNIVOICE_ROOT", "missing",
-            "DUB_OMNIVOICE_ROOT is not set; export it to point at "
-            "the OmniVoice dev repo checkout (the package is not on "
-            "PyPI yet). See `dub bootstrap`.",
-        ))
-    else:
-        root_path = Path(omni_root).expanduser().resolve()
-        marker = root_path / "omnivoice" / "models" / "omnivoice.py"
-        if marker.is_file():
-            checks.append(("env:DUB_OMNIVOICE_ROOT", "ok", str(root_path)))
-        else:
-            checks.append((
-                "env:DUB_OMNIVOICE_ROOT", "missing",
-                f"DUB_OMNIVOICE_ROOT={root_path} does not look like a "
-                f"valid OmniVoice checkout (missing {marker}).",
-            ))
-
-    # Probe torch under the chosen interpreter. omnivoice itself may
-    # not be on PyPI yet, so we do not require it as a hard gate —
-    # the actual error surfaces when the script runs. The doc tells
-    # the operator how to satisfy it.
+    # Probe the heavy inference deps under the chosen interpreter.
     if interp.exists():
         checks.append(("deps:torch", *diag.python_imports("torch", interpreter=interp)))
         # omni-cli is the OmniVoice CLI; if it's a real package, the
