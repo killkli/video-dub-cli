@@ -1,7 +1,8 @@
 # video-dub-cli
 
 > Resumable CLI pipeline for translating and dubbing videos into Chinese.
-> A single repo, a single install, no other clones required.
+> Canonical path: one repo + `uv sync --extra all` for CLI/ASR/Gemini/VoxCPM.
+> OmniVoice remains an optional backend with one explicit external checkout.
 
 ```bash
 uv sync --extra all
@@ -47,7 +48,7 @@ Real-backend `dub en2zh` / `dub ja2zh` end-to-end QA 紀錄見
 - **Resumable by design**: continue interrupted runs with `dub resume`
 - **Artifact-driven workflow**: each stage persists outputs on disk under `01_raw_video/`, `02_stems/`, ... `07_final/`
 - **Operator-grade validation**: `status`, `clean`, `validate`, and the readiness check `dub doctor` are first-class
-- **Standalone install**: `uv sync --extra all` is the only install step; no other repos, no `~/.hermes/...` paths required
+- **Standalone install**: `uv sync --extra all` fully provisions the canonical CLI + ASR + Gemini + VoxCPM path; OmniVoice is the only remaining backend that still needs an explicit external checkout via `DUB_OMNIVOICE_ROOT`
 - **Real pipeline stages**: stems → ASR → ref-audio → translation → TTS → final assembly
 
 ## Pipeline
@@ -114,7 +115,7 @@ install manager; it reads `uv.lock` and resolves a reproducible
 environment.
 
 ```bash
-# For full standalone stack (CLI + translation + TTS helpers + ASR helpers):
+# For the canonical standalone stack (CLI + translation + ASR + VoxCPM TTS client):
 uv sync --extra all
 
 # For dev / test work:

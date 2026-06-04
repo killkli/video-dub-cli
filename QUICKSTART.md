@@ -1,7 +1,8 @@
 # Quickstart — 5 分鐘上手 video-dub-cli (standalone contract)
 
-> 這個 quickstart 對應 standalone clone+uv 安裝路徑。沒有其他 repo 要
-> clone，沒有 `~/.hermes/...` 路徑要指定。
+> 這個 quickstart 對應 canonical standalone clone+uv 安裝路徑：
+> CLI + Gemini 翻譯 + repo-owned ASR + VoxCPM TTS client 都由本 repo 提供。
+> OmniVoice 仍是可選 backend；若要用它，另外設定 `DUB_OMNIVOICE_ROOT`。
 
 ---
 
@@ -23,7 +24,7 @@ cd video-dub-cli
 ### 3. `uv sync` 一次到位
 
 ```bash
-# 完整 standalone 環境（CLI + 翻譯 + TTS 助手 + ASR 助手）
+# Canonical standalone 環境（CLI + 翻譯 + repo-owned ASR + VoxCPM TTS client）
 uv sync --extra all
 ```
 
@@ -247,7 +248,7 @@ tts_backends:
 | `uv` | yes | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
 | `ffmpeg` / `ffprobe` | yes（任何真實 run） | `brew install ffmpeg` / `apt-get install ffmpeg` |
 | repo-owned ASR Python deps | yes（ASR 模式） | `uv sync --extra all` |
-| OmniVoice Python | optional（OmniVoice TTS backend） | 見 `dub bootstrap` |
+| OmniVoice checkout + Python stack | optional（OmniVoice TTS backend） | `uv sync --extra all` 會裝 torch stack；另外仍需設定 `DUB_OMNIVOICE_ROOT` 指向 OmniVoice checkout，見 `dub bootstrap` |
 | VoxCPM server | optional（VoxCPM TTS backend） | 見 `dub bootstrap` |
 | `torchcodec` | yes（real ASR / `torchaudio >= 2.9`） | `uv sync --extra all` 已含 |
 | `google-genai` | yes（real Gemini 翻譯） | `uv sync --extra all` 已含 |
