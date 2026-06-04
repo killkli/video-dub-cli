@@ -497,7 +497,8 @@ def doctor(config_path):
             click.echo(f"    - {gate}: {gate_status} ({detail})")
 
     if all_ok:
-        click.echo("doctor ok: standalone prerequisites look ready")
+        click.echo("doctor ok: ready for `dub en2zh` / `dub ja2zh`")
+        click.echo("doctor next: run `dub en2zh <VIDEO>` (or `dub ja2zh <VIDEO>`) to dub end-to-end")
     else:
         raise click.ClickException("doctor found missing prerequisites")
 

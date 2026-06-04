@@ -780,3 +780,74 @@ def test_dub_run_prints_skip_preflight_summary(runner, tmp_path, monkeypatch):
     assert result.exit_code == 0, result.output
     assert "mode=skip" in result.output
     assert f"existing_project_srt={existing}" in result.output
+
+
+# ── Auto-workflow contract (T3) ────────────────────────────────────────────
+
+
+def test_dub_doctor_success_message_names_auto_workflow_lane(runner, monkeypatch):
+    """AC-3: `dub doctor` must name the auto-workflow lane on success so
+    a first-time operator knows what command the readiness gate applies to.
+
+    We make every check report OK regardless of host state by monkeypatching
+    the helpers `dub.cli.doctor` uses internally, then assert the lane-aware
+    message and exit-zero.
+    """
+    import dub.cli as cli_mod
+    from dub.tts_engines.contract import TtsReadiness
+
+    monkeypatch.setattr("dub.cli._auto_recover_missing_secrets", lambda: [])
+
+    def _ok_which(_name):
+        return (True, "/bin/fake")
+
+    def _ok_path(_p):
+        return (True, "/fake/path")
+
+    def _ok_env(*_names):
+        return (True, "GOOGLE_API_KEY")
+
+    monkeypatch.setattr("dub.cli._which_status", _ok_which)
+    monkeypatch.setattr("dub.cli._path_status", _ok_path)
+    monkeypatch.setattr("dub.cli._env_status", _ok_env)
+
+    def _ok_python_imports(_name):
+        return ("ok", "/fake/import/path.py")
+
+    monkeypatch.setattr("dub.tts_engines.diagnostics.python_imports", _ok_python_imports)
+
+    ready = TtsReadiness(backend="fake", ready=True, detail="fake-ready", checks=[])
+    monkeypatch.setattr(cli_mod, "omnivoice_readiness", lambda _cfg: ready)
+    monkeypatch.setattr(cli_mod, "voxcpme_readiness", lambda _cfg: ready)
+    monkeypatch.setattr(cli_mod, "builtin_backends", lambda: ("omnivoice", "voxcpme"))
+
+    result = runner.invoke(main, ["doctor"])
+    assert result.exit_code == 0, result.output
+    assert "ready for `dub en2zh` / `dub ja2zh`" in result.output
+    assert "run `dub en2zh <VIDEO>`" in result.output
+
+
+def test_dub_doctor_failure_message_still_names_lane(runner, monkeypatch, tmp_path):
+    """AC-3: when prerequisites are missing, the failure path should still
+    name the lane in the message that surfaces, so the operator knows which
+    flow the failure applies to.
+    """
+    cfg = tmp_path / "cfg.yaml"
+    cfg.write_text(
+        "paths:\n"
+        "  qwenasr_cli: /bin/true\n"
+        "  omnivoice_python: /bin/true\n"
+        "  skills_dir: /tmp/vendor/pipeline_scripts\n"
+        "  translation_skill: /bin/true\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("dub.cli._auto_recover_missing_secrets", lambda: [])
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
+    result = runner.invoke(main, ["doctor", "--config", str(cfg)])
+    assert result.exit_code != 0
+    assert "doctor found missing prerequisites" in result.output
+    # AC-3 still does not require the success message on the failure path,
+    # but the failure must still point the operator at the auto path.
+    assert "gemini_api_key: MISSING" in result.output
