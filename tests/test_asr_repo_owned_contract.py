@@ -39,6 +39,7 @@ import re
 import subprocess
 import sys
 from contextlib import redirect_stdout
+from pathlib import Path
 
 
 # ---------------------------------------------------------------------------
@@ -150,6 +151,41 @@ def test_vendored_run_transcription_signature_matches_stage_call() -> None:
             f"dub.stages.asr must pass {kw!r} to run_transcription; "
             f"missing kwarg would mean the vendored contract has drifted"
         )
+
+
+def test_vendored_run_transcription_falls_back_to_single_cue_when_vad_finds_no_segments(monkeypatch) -> None:
+    """If full-text ASR succeeds but VAD yields no subtitle segments, subtitle
+    output must still be non-empty. The fallback contract is a single cue that
+    spans the backend-reported duration."""
+    from qwenasr_mlx_cli.core.types import SubtitleConfig, TranscriptionRequest, TranscriptionResult
+    import qwenasr_mlx_cli.pipelines.transcribe as transcribe_mod
+
+    class FakeBackend:
+        def transcribe(self, request: TranscriptionRequest) -> TranscriptionResult:
+            return TranscriptionResult(
+                text="Oh.",
+                output_format=request.output_format,
+                backend_name="mlx",
+                segments=[],
+                metadata={"duration": 30.0},
+            )
+
+    monkeypatch.setattr(transcribe_mod, "validate_media_input", lambda p: p)
+    monkeypatch.setattr(transcribe_mod.BackendRegistry, "create", lambda self, name: FakeBackend())
+    monkeypatch.setattr(transcribe_mod, "segment_by_vad", lambda audio_path, transcription_text, config: [])
+
+    rendered = transcribe_mod.run_transcription(
+        input_path=Path("/tmp/fake.mp4"),
+        backend_name="mlx",
+        output_format="srt",
+        language="en",
+        prompt=None,
+        subtitle_config=SubtitleConfig(output_format="srt"),
+        convert_simplified_to_traditional=False,
+    )
+
+    assert "00:00:00,000 --> 00:00:30,000" in rendered
+    assert "Oh." in rendered
 
 
 # ---------------------------------------------------------------------------

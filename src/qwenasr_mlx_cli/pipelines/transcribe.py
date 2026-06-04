@@ -3,7 +3,7 @@ from pathlib import Path
 
 from qwenasr_mlx_cli.audio.io import validate_media_input
 from qwenasr_mlx_cli.backends.registry import BackendRegistry
-from qwenasr_mlx_cli.core.types import SubtitleConfig, TranscriptionRequest
+from qwenasr_mlx_cli.core.types import Segment, SubtitleConfig, TranscriptionRequest
 from qwenasr_mlx_cli.outputs.renderers import render_output
 from qwenasr_mlx_cli.segmentation.vad import segment_by_vad
 
@@ -35,6 +35,13 @@ def run_transcription(
             transcription_text=result.text,
             config=subtitle_config,
         )
+        if not segments and result.text.strip():
+            duration = float(result.metadata.get("duration") or 0.0)
+            if duration <= 0:
+                duration = 1.0
+            segments = [
+                Segment(start=0.0, end=duration, text=result.text.strip())
+            ]
         result = replace(result, segments=segments)
 
     return render_output(
