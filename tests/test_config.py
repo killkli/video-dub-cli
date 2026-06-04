@@ -34,7 +34,7 @@ def test_paths_config_defaults():
         skills_dir=Path("/tmp"),
         translation_skill=Path("/bin/false"),
     )
-    assert p.dub_root == Path.home() / ".hermes"
+    assert p.dub_root == Path.home() / "video-dub-cli-runs"
 
 
 def test_default_paths_use_repo_owned_vendor_scripts():

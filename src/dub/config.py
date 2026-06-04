@@ -22,7 +22,7 @@ class PathsConfig(BaseModel):
     # Legacy only: historical Hermes subtitle-translation script path.
     # Standalone CLI translation now uses `translation.provider/model`.
     translation_skill: Path = Path(__file__).resolve().parents[2] / "src" / "dub" / "translator_gemini.py"
-    dub_root: Path = Field(default_factory=lambda: Path.home() / ".hermes")
+    dub_root: Path = Field(default_factory=lambda: Path.home() / "video-dub-cli-runs")
     # Repo-owned runtime directory. Operators should not need to set this;
     # it defaults to vendor/pipeline_scripts inside this repo.
     tts_engines_dir: Path = Path(__file__).resolve().parents[2] / "vendor" / "pipeline_scripts"

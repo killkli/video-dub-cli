@@ -69,10 +69,10 @@ uv run dub doctor
 ```
 
 passing 結果會列出每個 check 為 `OK`、每個 backend 為 `READY`。有
-missing 就會被點名，請對照 `uv run dub bootstrap` 的 7 行說明修正。
+missing 就會被點名，請對照 `uv run dub bootstrap` 的說明修正。
 
-> ASR 後端 `qwenasr-mlx` 不在 PyPI（目前狀態）—— 它是唯一一個
-> non-PyPI runtime dep。請見 [ASR 後端安裝](#asr-後端安裝-qwenasr-mlx)。
+> ASR 現在走 repo-owned in-process 路徑，不需要另外安裝一個
+> `qwenasr-mlx` CLI 當 canonical operator workflow。
 
 ---
 
@@ -93,9 +93,9 @@ cp examples/config_delegate_en2zh.yaml ~/.config/dub/config.yaml
 paths:
   # Legacy 相容欄位。Stage 2 現在是 repo-owned；一般 operator 不需要設定。
   qwenasr_cli: null
-  # OmniVoice 用的 Python。預設是 python3（dub venv）。
+  # Legacy 相容欄位。標準路徑通常不需要手動指定。
   omnivoice_python: python3
-  # 已被 vendored 到本 repo 的 pipeline scripts。
+  # Legacy 相容欄位。標準路徑直接用 repo-owned runtime。
   skills_dir: <repo>/vendor/pipeline_scripts
   # 預設的 project 根目錄。
   dub_root: ~/video-dub-cli-runs/
@@ -111,8 +111,8 @@ translation:
 ```
 
 > 舊版範例檔裡的 `/path/to/...` placeholder 在 standalone 契約下已不
-> 適用——請用 bare name（如 `qwenasr-mlx`、`python3`）或真實絕對路徑，
-> 不再保留 `/path/to/qwenasr-mlx` 之類的字面值。新版範例檔的所有
+> 適用——請用真實絕對路徑或直接沿用內建預設值，不再保留
+> `/path/to/qwenasr-mlx` 之類的字面值。新版範例檔的所有
 > `paths.*` 欄位都已預設成可工作的 bare name 預設值，沒特別需求可
 > 不用動。
 
@@ -187,56 +187,43 @@ uv run dub resume --project-dir /path/to/dub-project/
 
 ---
 
-## ASR 後端安裝 (qwenasr-mlx)
+## ASR runtime（repo-owned）
 
-`qwenasr-mlx` 仍是外部 ASR 依賴，但它已**不是** `dub doctor` 的主
-operator readiness gate。現在 `doctor` 主要檢查 repo-owned wrapper
-路徑、Gemini key、ffmpeg/ffprobe，以及 TTS backend readiness。若你要
-覆寫舊版相容欄位，repo 仍接受 `paths.qwenasr_cli`，但一般 operator
-不需要設定它。
-
-選一個安裝方式：
+Canonical path 是把 ASR 直接裝進 dub venv：
 
 ```bash
-# A. pipx（推薦；隔離環境）
-pipx install qwenasr-mlx
-
-# B. 灌進 dub venv
-uv pip install qwenasr-mlx
-
-# C. pipx 從 git 裝（如果還沒上 PyPI）
-pipx install git+https://github.com/<qwenasr-mlx-repo>
-```
-
-驗證：
-
-```bash
-which qwenasr-mlx
-# doctor 不會再把 qwenasr_cli 列成主 gate；這一步只是確認 CLI 可被找到
+uv sync --extra all
 uv run dub doctor
 ```
 
-如果你把 ASR CLI 放在別的名字或路徑，用設定檔覆寫：
+`dub doctor` 會直接檢查：
 
-```yaml
-paths:
-  qwenasr_cli: /full/path/to/your-asr
-```
+- `py:qwen3_asr_mlx`
+- `py:soundfile`
+- `py:pydub`
+- `py:silero_vad`
+- `py:torchcodec`
+
+如果其中任何一項 missing，修的是 **這個 repo 的 venv**，不是去另裝
+一個外部 `qwenasr-mlx` CLI。
+
+`paths.qwenasr_cli` 仍保留在 schema，純粹是為了讓舊 YAML 還能 parse；
+現在的 Stage 2 runtime 不再依賴它。
 
 ---
 
-## TTS backend 覆寫 (`tts_engines_dir`)
+## TTS backend 相容覆寫 (`tts_engines_dir`)
 
-預設情況下 Stage 5 從 `vendor/pipeline_scripts/`（也就是
-`paths.skills_dir`）抓 TTS wrapper scripts。如果你把 OmniVoice /
-VoxCPM wrappers 放在別處，用 `paths.tts_engines_dir` 覆寫：
+預設情況下 Stage 5 走 repo-owned runner + vendored runtime 資源，
+一般 operator 不需要改 `paths.*`。只有在你要重播舊設定、或刻意測試
+自訂 wrapper 目錄時，才使用 `paths.tts_engines_dir`：
 
 ```yaml
 paths:
   tts_engines_dir: /your/private/tts_wrappers
 ```
 
-每個 backend 的 readiness 由 `dub doctor` 回報，列出 wrapper /
+每個 backend 的 readiness 由 `dub doctor` 回報，列出 runner /
 interpreter / deps / service 各個 gate：
 
 ```
@@ -259,7 +246,7 @@ tts_backends:
 | Python 3.11+ | yes | `uv` 自帶管理 |
 | `uv` | yes | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
 | `ffmpeg` / `ffprobe` | yes（任何真實 run） | `brew install ffmpeg` / `apt-get install ffmpeg` |
-| `qwenasr-mlx` | yes（ASR 模式） | `pipx install` 見上面 |
+| repo-owned ASR Python deps | yes（ASR 模式） | `uv sync --extra all` |
 | OmniVoice Python | optional（OmniVoice TTS backend） | 見 `dub bootstrap` |
 | VoxCPM server | optional（VoxCPM TTS backend） | 見 `dub bootstrap` |
 | `torchcodec` | yes（real ASR / `torchaudio >= 2.9`） | `uv sync --extra all` 已含 |

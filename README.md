@@ -20,7 +20,7 @@ explicit artifact contracts.
 | CLI shell, config, validation, retry | yes | the `dub` script and friends ship in this repo |
 | Pipeline scripts (stems, ref-audio, loudnorm, remix) | yes | vendored under `vendor/pipeline_scripts/` |
 | Translation stage (Gemini REST) | yes | in-process logic in `src/dub/translator_gemini.py` |
-| ASR default backend (`qwenasr-mlx`) | **partial** | discoverable on `$PATH`; install is operator's job (see [ASR install](#asr-install-qwenasr-mlx)) |
+| ASR default backend | yes | repo-owned in-process backend via `src/qwenasr_mlx_cli`; install with `uv sync --extra all` |
 | TTS backends (OmniVoice, VoxCPM) | **partial** | adapter registry is in-repo; model stacks are operator-provided and `dub doctor` reports per-backend readiness |
 | ffmpeg / ffprobe | **system dep** | install via your OS package manager before any real run |
 | Translation API key (Gemini) | **operator-supplied** | export `GOOGLE_API_KEY` (or `GEMINI_API_KEY`); see [API key setup](#api-key-setup) |
@@ -29,9 +29,11 @@ This contract is verified end-to-end on `feature/standalone-repo-uv` by
 `docs/qa-standalone-matrix.md` (T6). A fresh clone + `uv sync --extra
 dev` + `uv run dub doctor` + a fake-backend end-to-end smoke all pass.
 
-`uv sync --extra all` 同步把 real-backend 依賴（`torchcodec` /
-`google-genai` / `gradio_client`）都裝進 dub venv，並由 `dub doctor`
-逐 gate 報告 ASR / Gemini / OmniVoice / VoxCPM 的 ready 狀態。
+`uv sync --extra all` 同步把 real-backend 依賴（ASR 的
+`qwen3-asr-mlx` / `soundfile` / `pydub` / `silero-vad` / `torchcodec`、
+翻譯的 `google-genai`、以及 VoxCPM 的 `gradio_client`）都裝進 dub
+venv，並由 `dub doctor` 逐 gate 報告 ASR / Gemini / OmniVoice /
+VoxCPM 的 ready 狀態。
 `dub doctor` 還會在 Hermes / CI shell 中自動從 `~/.zshrc` 復原
 Gemini key，這一點對陌生片源上手的 operator 來說是體感最明顯的進步。
 Real-backend `dub en2zh` / `dub ja2zh` end-to-end QA 紀錄見
@@ -170,13 +172,20 @@ cp .env.example .env
 `dub doctor` checks `GOOGLE_API_KEY` first and falls back to
 `GEMINI_API_KEY`; either works.
 
-### 5. Install the ASR backend
+### 5. Install the repo-owned ASR runtime
 
-`qwenasr-mlx` is the ASR CLI this pipeline calls. The repo does not
-vendor it; it is discovered on `$PATH` (the default
-`paths.qwenasr_cli` resolves to the bare name `qwenasr-mlx`).
+The canonical ASR path is repo-owned and in-process. Stage 2 calls the
+vendored `qwenasr_mlx_cli` package under `src/`, not an external
+`qwenasr-mlx` binary on `$PATH`.
 
-See [ASR install](#asr-install-qwenasr-mlx) below for install options.
+Install the ASR runtime by syncing the repo extras:
+
+```bash
+uv sync --extra all
+```
+
+`dub doctor` then verifies the Python-side ASR gates (`py:qwen3_asr_mlx`,
+`py:soundfile`, `py:pydub`, `py:silero_vad`, `py:torchcodec`).
 
 ## Quick start
 
@@ -208,11 +217,10 @@ cp examples/config_delegate_en2zh.yaml /path/to/config.yaml
 ```
 
 The example config ships with sensible defaults — most fields are
-optional. In the standalone contract, operators normally only need to
-override `paths.omnivoice_python` if OmniVoice lives in a different
-Python environment. The repo-owned wrapper directory already defaults to
-`vendor/pipeline_scripts` and should not need normal operator changes.
-See [Configuration](#configuration) for the full breakdown.
+optional. In the standalone contract, normal operators usually do not
+need to override any `paths.*` fields at all. Custom config is mainly
+for mix tuning, route selection, or legacy-compat parsing. See
+[Configuration](#configuration) for the full breakdown.
 
 ### 3. Run the pipeline
 
@@ -232,13 +240,11 @@ The config schema lives in `src/dub/config.py`. The default config that
 ships with the repo (no `--config` flag) is already valid for a fresh
 operator. You only need a custom config to override:
 
-- `paths.omnivoice_python` — if OmniVoice's Python lives outside the
-  default interpreter path
-- `paths.skills_dir` / `paths.tts_engines_dir` — only for advanced or
-  legacy compatibility cases; normal operators should use the repo-owned
-  default `vendor/pipeline_scripts`
 - `defaults.vocal_gain` / `inst_gain` — to retune the mix
+- `defaults.keep_fulltrack` — to keep the original full track in the final mix
 - `translation.model` — to pin a specific Gemini model
+- `translation.api_env_var` — if you want to read a different env var name
+- legacy compatibility fields if you are intentionally replaying an old config
 
 Full schema (canonical: see `src/dub/config.py`):
 
@@ -247,11 +253,10 @@ paths:
   # Legacy compatibility only. Stage 2 is now repo-owned; operators do
   # not normally need to set this. Kept so older configs still parse.
   qwenasr_cli: null
-  # Python interpreter that runs OmniVoice wrappers. Default: python3
-  # from the dub venv. Override only if OmniVoice lives in a separate venv.
+  # Legacy compatibility only. Stage 5 normally resolves the interpreter
+  # automatically; operators should not need to set this in the standard path.
   omnivoice_python: python3
-  # Vendored pipeline scripts. Default: <repo>/vendor/pipeline_scripts.
-  # Override only if you have custom stems / ref-audio / remix scripts.
+  # Legacy compatibility only. Normal runtime uses repo-owned scripts.
   skills_dir: <repo>/vendor/pipeline_scripts
   # Legacy compatibility only. The standalone CLI translates in-process
   # via translation.provider/model; this field is no longer read by any
@@ -302,46 +307,26 @@ Most fields have safe defaults — see the [Configuration cheatsheet](#configura
 | Use a different API key env var | `translation.api_env_var` (e.g. `GEMINI_API_KEY`) |
 | Tune the dub/vocal mix | `defaults.vocal_gain`, `defaults.inst_gain` |
 | Keep the full original track in the final mix | `defaults.keep_fulltrack: true` |
-| Use a private TTS wrapper script directory | `paths.tts_engines_dir` |
-| Use a separately-installed OmniVoice Python | `paths.omnivoice_python: /path/to/python3` |
 | Change where new project directories are created | `paths.dub_root` |
-| Use a different ASR CLI binary | `paths.qwenasr_cli: my-asr-cli` |
+| Parse an old config that still mentions an ASR CLI path | `paths.qwenasr_cli` (legacy compatibility only) |
+| Replay an old config that pins a Python path for TTS | `paths.omnivoice_python` (legacy compatibility only) |
+| Replay an old config that pins wrapper directories | `paths.skills_dir`, `paths.tts_engines_dir` (legacy compatibility only) |
 
-## ASR install (`qwenasr-mlx`)
+## ASR runtime
 
-`qwenasr-mlx` is the only known non-PyPI runtime dependency. The repo
-discovers it on `$PATH` (default `paths.qwenasr_cli = "qwenasr-mlx"`)
-and `dub doctor` reports whether it is reachable.
-
-Install options (pick one):
-
-```bash
-# Option A: pipx (recommended; isolated environment)
-pipx install qwenasr-mlx
-
-# Option B: pip into the dub venv
-uv pip install qwenasr-mlx
-
-# Option C: pipx from git, if not on PyPI yet
-pipx install git+https://github.com/<qwenasr-mlx-repo>
-```
-
-Then verify:
+There is no longer a separate operator-facing `qwenasr-mlx` install step
+in the canonical workflow. The supported path is:
 
 ```bash
-which qwenasr-mlx
-uv run dub doctor    # should show qwenasr_cli: OK
+uv sync --extra all
+uv run dub doctor
 ```
 
-If you have it under a non-default name or path, override:
+If `dub doctor` reports a missing ASR Python dependency, fix the dub venv
+itself rather than installing a second CLI elsewhere.
 
-```bash
-uv run dub run talk.mp4 --source-lang en --target-lang zh \
-  --config /path/to/config.yaml
-# ...with config.yaml containing:
-#   paths:
-#     qwenasr_cli: /full/path/to/your-asr
-```
+`paths.qwenasr_cli` remains in the config schema only so older YAML files
+continue to parse; the current Stage 2 runtime does not read it.
 
 ## Core commands
 
@@ -355,7 +340,7 @@ uv run dub run talk.mp4 --source-lang en --target-lang zh \
 | `dub clean --project-dir <project-dir> [--stage N]` | Remove stage outputs (preserve source by default) |
 | `dub validate --project-dir <project-dir>` | Verify final MP4 contract |
 | `dub doctor [--config CONFIG]` | Readiness check (prerequisites, per-backend readiness) |
-| `dub bootstrap` | Print 6-line bootstrap guidance |
+| `dub bootstrap` | Print bootstrap guidance for env / tools / backend prep |
 
 Common `dub run` options:
 
@@ -476,9 +461,9 @@ some pieces are still operator-graded:
   `dubbing_batch_tts*.py` wrappers. The adapter registry is in-repo
   (`src/dub/tts_engines/`), and `dub doctor` reports per-backend
   readiness, but moving the actual call in-process is a follow-up.
-- **qwenasr-mlx PyPI story** (R5). The only non-PyPI runtime
-  dependency is `qwenasr-mlx`. Until it ships on PyPI, install via
-  `pipx` from git (see [ASR install](#asr-install-qwenasr-mlx)).
+- **TTS backend consolidation** (R1/R5 follow-up). ASR is now repo-owned,
+  but TTS still carries the remaining integration debt: OmniVoice still has
+  an interpreter split story, and VoxCPM still depends on a local service.
 
 ## Development
 
