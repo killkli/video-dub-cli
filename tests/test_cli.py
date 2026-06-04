@@ -851,3 +851,152 @@ def test_dub_doctor_failure_message_still_names_lane(runner, monkeypatch, tmp_pa
     # AC-3 still does not require the success message on the failure path,
     # but the failure must still point the operator at the auto path.
     assert "gemini_api_key: MISSING" in result.output
+
+
+def test_en2zh_default_project_dir_is_video_stem_dub_next_to_input(
+    runner, tmp_path, monkeypatch
+):
+    """AC-1/AC-2: `dub en2zh <VIDEO>` (no flags) should auto-derive the
+    project directory as `<video-stem>.dub/` next to the source video, so
+    the operator can predict the output path without reading config.
+    """
+    from dub.cli import _default_auto_project_dir
+
+    video = tmp_path / "my_talk.mp4"
+    video.write_bytes(b"fake")
+    expected = tmp_path / "my_talk.dub"
+    assert _default_auto_project_dir(video) == expected
+
+    # Same default for ja2zh
+    video2 = tmp_path / "my_anime.mkv"
+    video2.write_bytes(b"fake")
+    assert _default_auto_project_dir(video2) == tmp_path / "my_anime.dub"
+
+
+def test_en2zh_help_documents_default_project_dir(runner):
+    """AC-1: the --help text must explicitly document the default
+    project-dir derivation so the operator does not have to read code.
+    """
+    result = runner.invoke(main, ["en2zh", "--help"])
+    assert result.exit_code == 0
+    assert "<video-stem>.dub/" in result.output
+    assert "next to the input video" in result.output
+
+    result_ja = runner.invoke(main, ["ja2zh", "--help"])
+    assert result_ja.exit_code == 0
+    assert "<video-stem>.dub/" in result_ja.output
+
+
+def test_en2zh_zero_flag_invocation_lands_project_next_to_video(
+    runner, tmp_path, monkeypatch
+):
+    """AC-1/AC-2: invoking `dub en2zh <VIDEO>` with no --project-dir
+    flag must place the project at `<video-stem>.dub/` next to the
+    source video. We monkeypatch the network-bound pieces
+    (project_input_info, run_pipeline) so the test stays a pure CLI
+    wiring test, but the project-dir derivation is the contract under
+    test here.
+    """
+    video = tmp_path / "auto_talk.mp4"
+    video.write_bytes(b"fake")
+    project_dir = tmp_path / "auto_talk.dub"
+
+    cfg = tmp_path / "cfg.yaml"
+    cfg.write_text(
+        "paths:\n"
+        "  qwenasr_cli: /bin/true\n"
+        "  omnivoice_python: /bin/true\n"
+        "  skills_dir: /tmp/vendor/pipeline_scripts\n"
+        "  translation_skill: /bin/true\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr("dub.cli.project_input_info", lambda _: {
+        "video_path": str(project_dir / "01_raw_video" / "video.mp4"),
+        "video_sha256": "abc",
+        "duration_sec": 1.23,
+    })
+    monkeypatch.setattr("dub.cli.run_pipeline", lambda *args, **kwargs: {"ok": True})
+
+    result = runner.invoke(
+        main,
+        ["en2zh", str(video), "--config", str(cfg), "--yes"],
+    )
+    assert result.exit_code == 0, result.output
+    assert f"project={project_dir}" in result.output
+    # The video must have been copied into the auto-derived project dir
+    assert (project_dir / "01_raw_video" / "video.mp4").exists()
+
+
+def test_ja2zh_zero_flag_invocation_lands_project_next_to_video(
+    runner, tmp_path, monkeypatch
+):
+    """Symmetric to en2zh: `dub ja2zh <VIDEO>` should also default
+    project-dir to <video-stem>.dub/ next to the input.
+    """
+    video = tmp_path / "anime_clip.mp4"
+    video.write_bytes(b"fake")
+    project_dir = tmp_path / "anime_clip.dub"
+
+    cfg = tmp_path / "cfg.yaml"
+    cfg.write_text(
+        "paths:\n"
+        "  qwenasr_cli: /bin/true\n"
+        "  omnivoice_python: /bin/true\n"
+        "  skills_dir: /tmp/vendor/pipeline_scripts\n"
+        "  translation_skill: /bin/true\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr("dub.cli.project_input_info", lambda _: {
+        "video_path": str(project_dir / "01_raw_video" / "video.mp4"),
+        "video_sha256": "abc",
+        "duration_sec": 1.23,
+    })
+    monkeypatch.setattr("dub.cli.run_pipeline", lambda *args, **kwargs: {"ok": True})
+
+    result = runner.invoke(
+        main,
+        ["ja2zh", str(video), "--config", str(cfg), "--yes"],
+    )
+    assert result.exit_code == 0, result.output
+    assert f"project={project_dir}" in result.output
+
+
+def test_en2zh_explicit_project_dir_still_wins(runner, tmp_path, monkeypatch):
+    """Backward-compat: when the operator passes --project-dir
+    explicitly, that path is used (not the auto-derived default)."""
+    video = tmp_path / "talk.mp4"
+    video.write_bytes(b"fake")
+    explicit = tmp_path / "my-explicit-proj"
+
+    cfg = tmp_path / "cfg.yaml"
+    cfg.write_text(
+        "paths:\n"
+        "  qwenasr_cli: /bin/true\n"
+        "  omnivoice_python: /bin/true\n"
+        "  skills_dir: /tmp/vendor/pipeline_scripts\n"
+        "  translation_skill: /bin/true\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr("dub.cli.project_input_info", lambda _: {
+        "video_path": str(explicit / "01_raw_video" / "video.mp4"),
+        "video_sha256": "abc",
+        "duration_sec": 1.23,
+    })
+    monkeypatch.setattr("dub.cli.run_pipeline", lambda *args, **kwargs: {"ok": True})
+
+    result = runner.invoke(
+        main,
+        [
+            "en2zh", str(video),
+            "--project-dir", str(explicit),
+            "--config", str(cfg),
+            "--yes",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert f"project={explicit}" in result.output
+    # The default-derived path must NOT have been created
+    assert not (tmp_path / "talk.dub").exists()

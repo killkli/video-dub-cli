@@ -27,6 +27,22 @@ def _prepare_project(video: Path, project_dir: str | None, cfg) -> Path:
     return create_project(cfg.paths.dub_root, video)
 
 
+def _default_auto_project_dir(video: Path) -> Path:
+    """Default project directory for the auto-workflow commands.
+
+    Auto-workflow callers (``dub en2zh`` / ``dub ja2zh``) place the
+    project next to the source video as ``<video-stem>.dub/`` so the
+    operator does not have to think about ``--project-dir`` or read
+    ``cfg.paths.dub_root`` to predict where outputs land.
+
+    The fallback is the timestamped ``cfg.paths.dub_root`` project — this
+    matches the legacy ``dub run`` behavior so callers without an obvious
+    video parent directory still get a project.
+    """
+    parent = video.resolve().parent
+    return parent / f"{video.stem}.dub"
+
+
 def _bootstrap_state(project_dir: Path, cfg) -> None:
     state_path = project_dir / ".dub" / "state.json"
     if state_path.exists():
@@ -270,7 +286,8 @@ def run(video, source_lang, target_lang, project_dir, config_path,
 
 @main.command(name="en2zh")
 @click.argument("video", type=click.Path(exists=True, path_type=Path))
-@click.option("--project-dir", type=click.Path(path_type=Path), default=None)
+@click.option("--project-dir", type=click.Path(path_type=Path), default=None,
+              help="Project directory (default: <video-stem>.dub/ next to the input video).")
 @click.option("--config", "config_path", type=click.Path(path_type=Path), default=None)
 @click.option(
     "--translate-mode",
@@ -283,12 +300,21 @@ def run(video, source_lang, target_lang, project_dir, config_path,
 @click.option("--keep-fulltrack", is_flag=True, default=False)
 @click.option("--yes", "-y", is_flag=True, default=False)
 def en2zh(video, project_dir, config_path, translate_mode, translated_srt, vocal_gain, inst_gain, keep_fulltrack, yes):
-    """Run the common English→Chinese operator flow."""
+    """Run the common English→Chinese operator flow.
+
+    The default zero-flag invocation runs the full pipeline end-to-end:
+    project directory is auto-derived from the video, source/target
+    languages are hard-coded to en→zh, and translate-mode defaults to
+    delegate (the existing happy path). Advanced knobs (--project-dir,
+    --translate-mode, --translated-srt, --vocal-gain, --inst-gain,
+    --keep-fulltrack) remain available for explicit-control overrides.
+    """
+    effective_project_dir = project_dir if project_dir is not None else _default_auto_project_dir(video)
     _run_pipeline_command(
         video,
         source_lang="en",
         target_lang="zh",
-        project_dir=project_dir,
+        project_dir=effective_project_dir,
         config_path=config_path,
         translate_mode=translate_mode,
         translated_srt=translated_srt,
@@ -301,7 +327,8 @@ def en2zh(video, project_dir, config_path, translate_mode, translated_srt, vocal
 
 @main.command(name="ja2zh")
 @click.argument("video", type=click.Path(exists=True, path_type=Path))
-@click.option("--project-dir", type=click.Path(path_type=Path), default=None)
+@click.option("--project-dir", type=click.Path(path_type=Path), default=None,
+              help="Project directory (default: <video-stem>.dub/ next to the input video).")
 @click.option("--config", "config_path", type=click.Path(path_type=Path), default=None)
 @click.option(
     "--translate-mode",
@@ -314,12 +341,21 @@ def en2zh(video, project_dir, config_path, translate_mode, translated_srt, vocal
 @click.option("--keep-fulltrack", is_flag=True, default=False)
 @click.option("--yes", "-y", is_flag=True, default=False)
 def ja2zh(video, project_dir, config_path, translate_mode, translated_srt, vocal_gain, inst_gain, keep_fulltrack, yes):
-    """Run the common Japanese→Chinese operator flow."""
+    """Run the common Japanese→Chinese operator flow.
+
+    The default zero-flag invocation runs the full pipeline end-to-end:
+    project directory is auto-derived from the video, source/target
+    languages are hard-coded to ja→zh, and translate-mode defaults to
+    delegate (the existing happy path). Advanced knobs (--project-dir,
+    --translate-mode, --translated-srt, --vocal-gain, --inst-gain,
+    --keep-fulltrack) remain available for explicit-control overrides.
+    """
+    effective_project_dir = project_dir if project_dir is not None else _default_auto_project_dir(video)
     _run_pipeline_command(
         video,
         source_lang="ja",
         target_lang="zh",
-        project_dir=project_dir,
+        project_dir=effective_project_dir,
         config_path=config_path,
         translate_mode=translate_mode,
         translated_srt=translated_srt,
