@@ -82,7 +82,21 @@ def test_dub_bootstrap_exits_zero(runner):
     assert "the only required external secret is GOOGLE_API_KEY / GEMINI_API_KEY" in result.output
 
 
-def test_dub_doctor_reports_missing_prereqs(runner, tmp_path):
+def test_dub_doctor_reports_missing_prereqs(runner, tmp_path, monkeypatch):
+    """Doctor must surface the actual gaps so the operator can act on them.
+
+    Pre-Lane-M the assertion was: omnivoice must be BLOCKED. After Lane M:
+      * the operator venv has omnivoice installed, so even a fake
+        `paths.omnivoice_python` falls back to the dub venv's real omnivoice.
+      * the operator venv has gradio_client, so voxcpme reads as READY too.
+      * Gemini key is recovered from ~/.zshrc on the operator host, so the
+        gemini gate goes from MISSING to OK without any config change.
+
+    The contract we still want to enforce is: when there is a real
+    missing prereq (here: an env var the operator has *not* exported
+    anywhere), `dub doctor` must report it and exit non-zero. That is
+    the operator-facing failure mode we are guarding.
+    """
     cfg = tmp_path / "cfg.yaml"
     cfg.write_text(
         "paths:\n"
@@ -91,11 +105,17 @@ def test_dub_doctor_reports_missing_prereqs(runner, tmp_path):
         "  translation_skill: /tmp/trans.py\n",
         encoding="utf-8",
     )
+    monkeypatch.setattr(
+        "dub.cli._auto_recover_missing_secrets", lambda: []
+    )
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
     result = runner.invoke(main, ["doctor", "--config", str(cfg)])
     assert result.exit_code != 0
     assert "repo_pipeline_scripts: OK" in result.output
     assert "tts_backends:" in result.output
-    assert "omnivoice: BLOCKED" in result.output
+    assert "gemini_api_key: MISSING" in result.output
     assert "doctor found missing prerequisites" in result.output
 
 
