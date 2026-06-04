@@ -1,5 +1,10 @@
 """dub.tts_engines.voxcpme — VoxCPM backend adapter.
 
+Stage 5 now shells to a repo-owned package runner at
+``src/dub/tts_engines/voxcpme/runner.py``. That runner forwards CLI argv
+to the vendored heavy-lift script
+``vendor/pipeline_scripts/dubbing_batch_tts_vox.py``.
+
 VoxCPM is the Japanese route (ja). Unlike OmniVoice, it has three
 distinct readiness gates:
 
@@ -23,7 +28,7 @@ from pathlib import Path
 from typing import Optional
 
 from dub.config import DubConfig
-from dub.runtime_paths import pipeline_scripts_dir
+from dub.runtime_paths import pipeline_scripts_dir, repo_root
 from dub.tts_engines import ResolvedRoute, register
 from dub.tts_engines.contract import TtsReadiness, TtsRoute
 from dub.tts_engines import diagnostics as diag
@@ -35,7 +40,7 @@ BACKEND_NAME = "voxcpme"
 # (e.g. VoxCPM for en); the OmniVoice backend already covers the
 # current * fallback, so leaving VoxCPM narrow is the safe move.
 ROUTES: list[TtsRoute] = [
-    TtsRoute(source_lang="ja", script_name="dubbing_batch_tts_vox.py",
+    TtsRoute(source_lang="ja", script_name="runner.py",
              source_srt_flag="--ja-srt", needs_project_dir=True),
 ]
 
@@ -53,14 +58,22 @@ def find_route(source_lang: str) -> Optional[TtsRoute]:
 
 def engines_dir(config: DubConfig) -> Path:
     _ = config
-    return pipeline_scripts_dir()
+    return Path(__file__).resolve().parent
 
 
 def build_route(config: DubConfig, source_lang: str = "ja") -> ResolvedRoute:
     route = find_route(source_lang)
     if route is None:
         raise KeyError(f"VoxCPM has no route for source_lang={source_lang!r}")
-    script_path = engines_dir(config) / route.script_name
+    scripts_dir = pipeline_scripts_dir()
+    repo_vendored_dir = repo_root() / "vendor" / "pipeline_scripts"
+    config_scripts_dir = Path(config.paths.skills_dir)
+    if scripts_dir != repo_vendored_dir:
+        script_path = scripts_dir / "dubbing_batch_tts_vox.py"
+    elif config_scripts_dir != repo_vendored_dir and (config_scripts_dir / "dubbing_batch_tts_vox.py").exists():
+        script_path = config_scripts_dir / "dubbing_batch_tts_vox.py"
+    else:
+        script_path = engines_dir(config) / route.script_name
     # VoxCPM has no separate-interpreter requirement; it runs in the
     # dub venv (where gradio_client + opencc are installed via extras).
     interpreter = diag.resolve_interpreter(

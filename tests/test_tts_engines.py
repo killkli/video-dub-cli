@@ -29,7 +29,9 @@ def test_omnivoice_route_uses_repo_owned_runtime_scripts(tmp_path):
 
     route = build_omnivoice_route(cfg, source_lang="en")
 
-    assert route.script_path == engines_dir() / "dubbing_batch_tts.py"
+    assert route.script_path.name == "runner.py"
+    assert route.script_path.parent.name == "omnivoice"
+    assert route.script_path.exists()
     assert route.source_srt_flag == "--en-srt"
     assert route.needs_project_dir is False
     assert route.backend_name == "omnivoice"
@@ -42,7 +44,9 @@ def test_voxcpme_route_uses_repo_owned_runtime_scripts(tmp_path):
 
     route = build_voxcpme_route(cfg, source_lang="ja")
 
-    assert route.script_path == engines_dir() / "dubbing_batch_tts_vox.py"
+    assert route.script_path.name == "runner.py"
+    assert route.script_path.parent.name == "voxcpme"
+    assert route.script_path.exists()
     assert route.source_srt_flag == "--ja-srt"
     assert route.needs_project_dir is True
     assert route.backend_name == "voxcpme"

@@ -1,8 +1,9 @@
 """dub.tts_engines.omnivoice — OmniVoice backend adapter.
 
-Status: legacy-shellout adapter. The actual heavy-lift TTS script still
-lives in this repo's ``vendor/pipeline_scripts/dubbing_batch_tts.py``,
-not in this package.
+Stage 5 now shells to a repo-owned package runner at
+``src/dub/tts_engines/omnivoice/runner.py``. That runner is intentionally
+thin: it forwards CLI argv to the vendored heavy-lift script
+``vendor/pipeline_scripts/dubbing_batch_tts.py``.
 The adapter's job is to:
 
 - declare the route contract (en / ja-also-falls-back-to-OmniVoice)
@@ -10,11 +11,10 @@ The adapter's job is to:
 - pick the right interpreter (OmniVoice's own venv with torch + omnivoice)
 - report readiness so ``dub doctor`` can tell the operator what is missing
 
-Long-term target (R1 in docs/standalone-dependency-map.md): the script
-becomes ``dub.tts_engines.omnivoice.runner`` and is invoked in-process
-from the dub venv. This module's interface stays the same — the
-``build_route`` impl just changes its interpreter-resolution and
-script-resolution internals.
+Long-term target (R1 in docs/standalone-dependency-map.md): the runner
+stops forwarding to the vendored script and the implementation becomes
+fully in-package. This module's interface stays the same — the
+``build_route`` impl just changes what the runner executes internally.
 """
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Optional
 
 from dub.config import DubConfig
-from dub.runtime_paths import pipeline_scripts_dir
+from dub.runtime_paths import pipeline_scripts_dir, repo_root
 from dub.tts_engines import ResolvedRoute, register
 from dub.tts_engines.contract import TtsReadiness, TtsRoute
 from dub.tts_engines import diagnostics as diag
@@ -31,15 +31,14 @@ from dub.tts_engines import diagnostics as diag
 
 BACKEND_NAME = "omnivoice"
 
-# Two scripts under the engines dir match this backend's routes today:
-#   - dubbing_batch_tts.py   (en route, OmniVoice MPS backend)
-# The same script is used for the ja-fallback if the VoxCPM backend is
-# not installed; we let the route resolver prefer VoxCPM first via the
-# ``tts_engines`` registry order in the stage.
+# The package-owned runner forwards to vendor/pipeline_scripts/
+# dubbing_batch_tts.py. The same runner is used for the ja-fallback if the
+# VoxCPM backend is not installed; we let the route resolver prefer VoxCPM
+# first via the ``tts_engines`` registry order in the stage.
 ROUTES: list[TtsRoute] = [
-    TtsRoute(source_lang="en", script_name="dubbing_batch_tts.py",
+    TtsRoute(source_lang="en", script_name="runner.py",
              source_srt_flag="--en-srt", needs_project_dir=False),
-    TtsRoute(source_lang="*", script_name="dubbing_batch_tts.py",
+    TtsRoute(source_lang="*", script_name="runner.py",
              source_srt_flag="--en-srt", needs_project_dir=False),
 ]
 
@@ -59,20 +58,24 @@ def find_route(source_lang: str) -> Optional[TtsRoute]:
 
 
 def engines_dir(config: DubConfig) -> Path:
-    """Where the OmniVoice runtime wrapper lives.
-
-    Defaults to the repo-owned vendored scripts dir, but test harnesses may
-    override it via ``DUB_PIPELINE_SCRIPTS_DIR`` through runtime_paths.
-    """
+    """Where the OmniVoice package-owned runner lives."""
     _ = config
-    return pipeline_scripts_dir()
+    return Path(__file__).resolve().parent
 
 
 def build_route(config: DubConfig, source_lang: str = "en") -> ResolvedRoute:
     route = find_route(source_lang)
     if route is None:
         raise KeyError(f"OmniVoice has no route for source_lang={source_lang!r}")
-    script_path = engines_dir(config) / route.script_name
+    scripts_dir = pipeline_scripts_dir()
+    repo_vendored_dir = repo_root() / "vendor" / "pipeline_scripts"
+    config_scripts_dir = Path(config.paths.skills_dir)
+    if scripts_dir != repo_vendored_dir:
+        script_path = scripts_dir / "dubbing_batch_tts.py"
+    elif config_scripts_dir != repo_vendored_dir and (config_scripts_dir / "dubbing_batch_tts.py").exists():
+        script_path = config_scripts_dir / "dubbing_batch_tts.py"
+    else:
+        script_path = engines_dir(config) / route.script_name
     interpreter = diag.resolve_interpreter(
         backend_preferred=Path(config.paths.omnivoice_python),
         dub_executable=Path(sys.executable),

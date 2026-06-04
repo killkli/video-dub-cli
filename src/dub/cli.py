@@ -452,11 +452,20 @@ def doctor(config_path):
     gemini_ok, gemini_detail = _env_status(cfg.translation.api_env_var, "GOOGLE_API_KEY", "GEMINI_API_KEY")
     checks.append(("gemini_api_key", gemini_ok, gemini_detail))
 
-    # Real-backend gates: the dependencies that real qwenasr-mlx + google-genai
-    # translation + VoxCPM need at runtime. These are pulled in by `uv sync
-    # --extra all` but may be missing on a freshly-cloned host. Reporting them
-    # here means `dub doctor` is the single source of truth for the operator.
+    # Real-backend gates: the dependencies that the repo-owned ASR + Gemini
+    # translation + VoxCPM need at runtime. These are pulled in by
+    # `uv sync --extra all` but may be missing on a freshly-cloned host.
+    # Reporting them here means `dub doctor` is the single source of truth
+    # for the operator.
     from dub.tts_engines import diagnostics as _diag
+    qwen_status, qwen_detail = _diag.python_imports("qwen3_asr_mlx")
+    checks.append(("py:qwen3_asr_mlx", qwen_status == "ok", qwen_detail))
+    sf_status, sf_detail = _diag.python_imports("soundfile")
+    checks.append(("py:soundfile", sf_status == "ok", sf_detail))
+    pydub_status, pydub_detail = _diag.python_imports("pydub")
+    checks.append(("py:pydub", pydub_status == "ok", pydub_detail))
+    vad_status, vad_detail = _diag.python_imports("silero_vad")
+    checks.append(("py:silero_vad", vad_status == "ok", vad_detail))
     ggenai_status, ggenai_detail = _diag.python_imports("google.genai")
     checks.append(("py:google_genai", ggenai_status == "ok", ggenai_detail))
     tcdc_status, tcdc_detail = _diag.python_imports("torchcodec")
@@ -498,10 +507,12 @@ def bootstrap():
     """Print bootstrap guidance for repo-only setup and backend preparation."""
     click.echo("bootstrap: repo package install is uv-managed; run `uv sync --extra all` for the full standalone stack")
     click.echo("bootstrap: install system tools ffmpeg/ffprobe before real media runs")
+    click.echo("bootstrap: repo-owned ASR ships in `src/qwenasr_mlx_cli`; do not install a separate `qwenasr-mlx` CLI for the canonical path")
+    click.echo("bootstrap: the canonical ASR runtime lives in the dub venv and needs qwen3-asr-mlx + soundfile + pydub + silero-vad + torchcodec (all pulled in by `uv sync --extra all`)")
     click.echo("bootstrap: copy `.env.example` to your shell env setup and export GOOGLE_API_KEY (or GEMINI_API_KEY) before Gemini translation")
     click.echo("bootstrap: if you use zsh and your keys live in ~/.zshrc, you may need to source it before `uv run` because Hermes / CI shells do not load interactive rc files")
     click.echo("bootstrap: repo-owned pipeline scripts live under vendor/pipeline_scripts; no extra path config is required")
-    click.echo("bootstrap: real backend also needs torchcodec (for torchaudio >= 2.9 audio I/O) and google-genai (for Gemini translation) — both are pulled in by `uv sync --extra all`")
+    click.echo("bootstrap: real backend also needs google-genai for Gemini translation — it is pulled in by `uv sync --extra all`")
     click.echo("bootstrap: OmniVoice route uses the configured Python interpreter (default: python3) with required packages installed")
     click.echo("bootstrap: VoxCPM route expects the dub venv to include gradio_client + opencc, and a local VoxCPM server on 127.0.0.1:8808")
     click.echo("bootstrap: the only required external secret is GOOGLE_API_KEY / GEMINI_API_KEY")
