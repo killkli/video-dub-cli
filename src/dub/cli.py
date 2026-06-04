@@ -829,6 +829,25 @@ def _bootstrap_backend_venv(*, backend_name: str, extra_name: str, path_key: str
         cwd=str(repo_root),
     )
 
+    runtime_import_probes = {
+        "omnivoice": ["torch", "omnivoice", "opencc"],
+        "voxcpm": ["gradio_client"],
+    }
+    imports_to_probe = runtime_import_probes.get(backend_name, [])
+    if imports_to_probe:
+        probe_code = "; ".join(f"import {name}" for name in imports_to_probe)
+        try:
+            subprocess.run(
+                [str(py), "-c", probe_code],
+                check=True,
+                cwd=str(repo_root),
+            )
+        except subprocess.CalledProcessError as exc:
+            mods = ", ".join(imports_to_probe)
+            raise click.ClickException(
+                f"bootstrap-{backend_name} installed but runtime import probe failed for: {mods}"
+            ) from exc
+
     data = _load_yaml_dict(config_path)
     paths = data.get("paths") or {}
     if not isinstance(paths, dict):

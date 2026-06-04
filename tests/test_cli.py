@@ -138,6 +138,7 @@ def test_dub_bootstrap_omnivoice_updates_config(runner, monkeypatch, tmp_path):
     assert data["paths"]["omnivoice_python"] == str((venv_dir / "bin" / "python").resolve())
     assert any(cmd[0][1] == "venv" for cmd in calls)
     assert any(cmd[0][1:4] == ["pip", "install", "--python"] for cmd in calls)
+    assert any(cmd[0][1:] == ["-c", "import torch; import omnivoice; import opencc"] for cmd in calls)
     assert "wrote paths.omnivoice_python" in result.output
 
 
