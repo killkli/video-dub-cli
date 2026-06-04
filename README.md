@@ -4,11 +4,49 @@
 > 正式支援：**單一 repo + `uv sync --extra all`**，提供 CLI、本地 ASR、Gemini 翻譯與 VoxCPM 路線。
 > OmniVoice 已改為 **repo 內建程式碼 + 獨立 Python 環境** 的可選路線，請用 `dub bootstrap-omnivoice` 建立。
 
+## 中文快速上手（推薦從這裡開始）
+
+### 最短路徑
+
 ```bash
 uv sync --extra all
 uv run dub doctor
-uv run dub auto talk.mp4           # ← canonical one-command entrypoint
+uv run dub auto talk.mp4
 ```
+
+上面三行就是目前的 canonical operator flow：
+- `uv sync --extra all`：建立標準執行環境
+- `uv run dub doctor`：先確認 EN / JA 路線是否就緒
+- `uv run dub auto talk.mp4`：正式的一鍵入口
+
+### `dub auto` 會做什麼
+
+- 先做 **30 秒音訊探針**
+- 自動判斷來源語言是 **英文** 或 **日文**
+- 自動選擇 EN→ZH 或 JA→ZH 路線
+- 建立 `<video-stem>.dub/` 專案目錄並執行整條 pipeline
+
+### 最常用指令
+
+```bash
+uv run dub auto talk.mp4
+uv run dub auto talk.mp4 --source-lang en
+uv run dub auto anime.mp4 --source-lang ja
+uv run dub resume --project-dir /path/to/project
+uv run dub status --project-dir /path/to/project
+uv run dub validate --project-dir /path/to/project
+```
+
+### 你需要知道的事
+
+- `dub auto` 的支援範圍目前是 **英文 / 日文 → 中文**
+- 若自動判斷不夠明確，CLI 會要求你改用 `--source-lang en|ja`
+- `--source-lang` 明確指定時，永遠優先於自動偵測
+- `dub en2zh` / `dub ja2zh` 是語言專用別名；`dub run` 是進階 escape hatch
+
+更完整的逐步說明請看 [`QUICKSTART.md`](./QUICKSTART.md)。
+
+---
 
 `dub auto` 預設執行 30 秒音訊探針，自動判斷來源語言（英文或日文）再選擇對應路線；明確的 `--source-lang en|ja` 永遠優先，會印出 `route_basis=override:explicit-flag` 供審計。
 `dub en2zh` / `dub ja2zh` 是明確的語言專用別名，內部與 `dub auto` 共用同一套 staged pipeline 合約。
