@@ -29,6 +29,15 @@ This contract is verified end-to-end on `feature/standalone-repo-uv` by
 `docs/qa-standalone-matrix.md` (T6). A fresh clone + `uv sync --extra
 dev` + `uv run dub doctor` + a fake-backend end-to-end smoke all pass.
 
+`uv sync --extra all` 同步把 real-backend 依賴（`torchcodec` /
+`google-genai` / `gradio_client`）都裝進 dub venv，並由 `dub doctor`
+逐 gate 報告 ASR / Gemini / OmniVoice / VoxCPM 的 ready 狀態。
+`dub doctor` 還會在 Hermes / CI shell 中自動從 `~/.zshrc` 復原
+Gemini key，這一點對陌生片源上手的 operator 來說是體感最明顯的進步。
+Real-backend `dub en2zh` / `dub ja2zh` end-to-end QA 紀錄見
+`docs/operator-qa-real-backend-en2zh-2026-06-03.md` 與
+`docs/operator-qa-real-backend-ja2zh-2026-06-03.md`。
+
 ## Highlights
 
 - **One-shot operator aliases**: `dub en2zh`, `dub ja2zh`

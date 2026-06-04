@@ -139,6 +139,57 @@ def _env_status(*names: str) -> tuple[bool, str]:
     return False, ",".join(ordered)
 
 
+# Names of secrets we know how to auto-recover from the user's interactive
+# shell rc files. We do this on a best-effort basis because Hermes / CI
+# shells do not load ~/.zshrc, and `GOOGLE_API_KEY` exported there is not
+# visible to `uv run` subprocesses. Reading the rc file directly is a
+# small, explicit operator ergonomics fix — it never overrides an
+# already-set value, and is skipped silently if the rc file is absent.
+_AUTO_RECOVER_SECRET_NAMES: tuple[str, ...] = (
+    "GOOGLE_API_KEY",
+    "GEMINI_API_KEY",
+)
+
+
+def _auto_recover_missing_secrets(names: tuple[str, ...] = _AUTO_RECOVER_SECRET_NAMES) -> list[str]:
+    """Best-effort: if any of ``names`` is unset and the user has the
+    corresponding export line in a known shell rc, set it for this process.
+
+    Returns the list of names that were recovered.
+
+    This is intentionally narrow:
+
+    * Only the secrets that ``dub doctor`` reports on are touched.
+    * Only the user's own rc files are read (``~/.zshrc``, ``~/.bashrc``).
+    * Existing values are never overridden.
+    * On any parse failure, we silently skip — the doctor will surface the
+      real status and the operator can fix it manually.
+    """
+    recovered: list[str] = []
+    for name in names:
+        if (os.environ.get(name) or "").strip():
+            continue
+        for rc in (Path.home() / ".zshrc", Path.home() / ".bashrc"):
+            if not rc.exists():
+                continue
+            try:
+                for raw in rc.read_text(errors="ignore").splitlines():
+                    line = raw.strip()
+                    prefix = f"export {name}="
+                    if not line.startswith(prefix):
+                        continue
+                    value = line[len(prefix):].strip().strip('"').strip("'")
+                    if value:
+                        os.environ[name] = value
+                        recovered.append(name)
+                        break
+            except OSError:
+                continue
+            if name in recovered:
+                break
+    return recovered
+
+
 @click.group()
 @click.version_option()
 def main():
@@ -385,6 +436,11 @@ def doctor(config_path):
     """Check standalone runtime readiness and report missing dependencies."""
     cfg = load_config(config_path)
 
+    # Best-effort auto-recovery of Gemini key from interactive shell rc files.
+    # This is a small operator-ergonomics fix for shells (Hermes / CI) that do
+    # not load ~/.zshrc. We never override an already-set value.
+    auto_recovered = _auto_recover_missing_secrets()
+
     checks: list[tuple[str, bool, str]] = []
     ffmpeg_ok, ffmpeg_detail = _which_status("ffmpeg")
     checks.append(("ffmpeg", ffmpeg_ok, ffmpeg_detail))
@@ -396,12 +452,28 @@ def doctor(config_path):
     gemini_ok, gemini_detail = _env_status(cfg.translation.api_env_var, "GOOGLE_API_KEY", "GEMINI_API_KEY")
     checks.append(("gemini_api_key", gemini_ok, gemini_detail))
 
+    # Real-backend gates: the dependencies that real qwenasr-mlx + google-genai
+    # translation + VoxCPM need at runtime. These are pulled in by `uv sync
+    # --extra all` but may be missing on a freshly-cloned host. Reporting them
+    # here means `dub doctor` is the single source of truth for the operator.
+    from dub.tts_engines import diagnostics as _diag
+    ggenai_status, ggenai_detail = _diag.python_imports("google.genai")
+    checks.append(("py:google_genai", ggenai_status == "ok", ggenai_detail))
+    tcdc_status, tcdc_detail = _diag.python_imports("torchcodec")
+    checks.append(("py:torchcodec", tcdc_status == "ok", tcdc_detail))
+
     all_ok = True
     for name, ok, detail in checks:
         status = "OK" if ok else "MISSING"
         click.echo(f"{name}: {status} ({detail})")
         if not ok:
             all_ok = False
+
+    if auto_recovered:
+        click.echo(
+            f"note: auto-recovered {','.join(auto_recovered)} from interactive shell rc "
+            "(Hermes / CI shells do not load ~/.zshrc; re-run in a real zsh to set it permanently)"
+        )
 
     readiness_by_backend = {
         "omnivoice": omnivoice_readiness(cfg),
@@ -427,7 +499,10 @@ def bootstrap():
     click.echo("bootstrap: repo package install is uv-managed; run `uv sync --extra all` for the full standalone stack")
     click.echo("bootstrap: install system tools ffmpeg/ffprobe before real media runs")
     click.echo("bootstrap: copy `.env.example` to your shell env setup and export GOOGLE_API_KEY (or GEMINI_API_KEY) before Gemini translation")
+    click.echo("bootstrap: if you use zsh and your keys live in ~/.zshrc, you may need to source it before `uv run` because Hermes / CI shells do not load interactive rc files")
     click.echo("bootstrap: repo-owned pipeline scripts live under vendor/pipeline_scripts; no extra path config is required")
+    click.echo("bootstrap: real backend also needs torchcodec (for torchaudio >= 2.9 audio I/O) and google-genai (for Gemini translation) — both are pulled in by `uv sync --extra all`")
     click.echo("bootstrap: OmniVoice route uses the configured Python interpreter (default: python3) with required packages installed")
     click.echo("bootstrap: VoxCPM route expects the dub venv to include gradio_client + opencc, and a local VoxCPM server on 127.0.0.1:8808")
     click.echo("bootstrap: the only required external secret is GOOGLE_API_KEY / GEMINI_API_KEY")
+    click.echo("bootstrap: run `dub doctor` to verify every gate before your first real run")

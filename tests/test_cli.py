@@ -99,6 +99,61 @@ def test_dub_doctor_reports_missing_prereqs(runner, tmp_path):
     assert "doctor found missing prerequisites" in result.output
 
 
+# ── Real-backend productization gates (Lane M) ───────────────────────────────
+
+
+def test_dub_doctor_reports_real_backend_python_gates(runner, tmp_path):
+    """`dub doctor` must list `py:google_genai` and `py:torchcodec` so the
+    operator can confirm the real-backend runtime is wired without
+    having to run a full pipeline first.
+    """
+    result = runner.invoke(main, ["doctor"])
+    assert "py:google_genai:" in result.output
+    assert "py:torchcodec:" in result.output
+
+
+def test_auto_recover_missing_secrets_reads_zshrc(monkeypatch, tmp_path):
+    """When GOOGLE_API_KEY is unset in env but exported in ~/.zshrc,
+    `dub doctor` should auto-recover it and print a note. We redirect
+    `Path.home()` via monkeypatching the module-level constant the helper
+    uses.
+    """
+    import dub.cli as cli_mod
+    from pathlib import Path
+
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    (fake_home / ".zshrc").write_text(
+        'export GOOGLE_API_KEY="rc-secret-1234"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod.Path, "home", classmethod(lambda cls: fake_home))
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
+    recovered = cli_mod._auto_recover_missing_secrets()
+    assert "GOOGLE_API_KEY" in recovered
+    import os
+    assert os.environ["GOOGLE_API_KEY"] == "rc-secret-1234"
+
+
+def test_auto_recover_does_not_override_existing(monkeypatch, tmp_path):
+    import dub.cli as cli_mod
+
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    (fake_home / ".zshrc").write_text(
+        'export GOOGLE_API_KEY="rc-secret-9999"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_mod.Path, "home", classmethod(lambda cls: fake_home))
+    monkeypatch.setenv("GOOGLE_API_KEY", "env-wins")
+
+    recovered = cli_mod._auto_recover_missing_secrets()
+    assert recovered == []  # existing env value is preserved
+    import os
+    assert os.environ["GOOGLE_API_KEY"] == "env-wins"
+
 def _make_validate_project(tmp_path, *, translate_mode="delegate", translate_stage_status="done"):
     project_dir = tmp_path / "proj"
     for rel in [

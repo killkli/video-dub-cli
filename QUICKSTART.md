@@ -242,8 +242,13 @@ interpreter / deps / service 各個 gate：
 ```
 tts_backends:
   omnivoice: READY (...)
-  voxcpme: BLOCKED (missing: deps:gradio_client, deps:opencc)
+  voxcpme:   READY (...)
 ```
+
+`dub doctor` 同時會額外報告 `py:google_genai` 與 `py:torchcodec`
+這兩個 real-backend 依賴 gate；在 Hermes / CI shell 中若偵測到
+`~/.zshrc` 有 `GOOGLE_API_KEY / GEMINI_API_KEY` 的 export，會自動
+復原並印出 `note: auto-recovered ...` 一行。
 
 ---
 
@@ -257,7 +262,10 @@ tts_backends:
 | `qwenasr-mlx` | yes（ASR 模式） | `pipx install` 見上面 |
 | OmniVoice Python | optional（OmniVoice TTS backend） | 見 `dub bootstrap` |
 | VoxCPM server | optional（VoxCPM TTS backend） | 見 `dub bootstrap` |
-| Gemini API key | yes（delegate 翻譯） | `export GOOGLE_API_KEY=...` |
+| `torchcodec` | yes（real ASR / `torchaudio >= 2.9`） | `uv sync --extra all` 已含 |
+| `google-genai` | yes（real Gemini 翻譯） | `uv sync --extra all` 已含 |
+| `gradio_client` | yes（VoxCPM TTS backend） | `uv sync --extra all` 已含 |
+| Gemini API key | yes（delegate 翻譯） | `export GOOGLE_API_KEY=...`；或寫進 `~/.zshrc` 由 `dub doctor` 自動復原 |
 
 `uv run dub doctor` 會把每一項都列出來。沒有 `~/.hermes/...` 路徑要求。
 
@@ -269,3 +277,4 @@ tts_backends:
 - 想了解 standalone 契約 → `docs/standalone-dependency-map.md` (T1)
 - 想看 fresh operator 驗證結果 → `docs/qa-standalone-matrix.md` (T6)
 - 想看 TTS adapter 設計 → `docs/tts-backend-consolidation.md` (T5)
+- 想看真實片源 end-to-end QA 紀錄 → `docs/operator-qa-real-backend-en2zh-2026-06-03.md` / `docs/operator-qa-real-backend-ja2zh-2026-06-03.md`

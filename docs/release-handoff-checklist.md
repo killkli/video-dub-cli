@@ -52,8 +52,20 @@ pytest tests/integration/test_6e_route_scenarios.py -q
 
 如要做文件級 operator 驗證，參考：
 
-- `docs/operator-qa-canonical-flow-2026-06-03.md`（目前 canonical fake-backend support-boundary 記錄）
-- `docs/real-backend-verification-gate-2026-06-03.md`（real-backend 尚待完成的驗證閘門與非宣稱邊界）
+- `docs/operator-qa-canonical-flow-2026-06-03.md`（fake-backend support-boundary 記錄）
+- `docs/operator-qa-real-backend-en2zh-2026-06-03.md`（real-backend EN→ZH QA，已成功）
+- `docs/operator-qa-real-backend-ja2zh-2026-06-03.md`（real-backend JA→ZH QA，已成功）
+- `docs/real-backend-verification-gate-2026-06-03.md`（real-backend 閘門與非宣稱邊界）
+
+## 4.5 Real-backend productization surface
+
+`dub doctor` 與 `uv sync --extra all` 已涵蓋真實 backend 所需依賴：
+
+- [ ] `dub doctor` 顯示 `py:google_genai: OK`
+- [ ] `dub doctor` 顯示 `py:torchcodec: OK`
+- [ ] `dub doctor` 顯示 `omnivoice: READY` 或 `voxcpme: READY`（依本次語言）
+- [ ] `dub doctor` 在 zsh / Hermes shell 中會自動復原 `GOOGLE_API_KEY / GEMINI_API_KEY` 並印出 `auto-recovered ...` note
+- [ ] `uv sync --extra all` 安裝後 `dub doctor` 直接 green，無需再手動 `pip install`
 
 ## 5. Config / examples
 
@@ -71,11 +83,10 @@ pytest tests/integration/test_6e_route_scenarios.py -q
 - [ ] operator UX 仍偏工程向，錯誤訊息與引導仍可持續收斂
 
 ## 7. Recommended next wave
-
+## 7. Recommended next wave
 如果要接續下一輪工作，建議優先順序：
-
-1. 真實 backend 小樣本 operator QA（非 fake）
-2. release smoke script：一鍵跑 help + integration + operator QA
+1. 任意陌生片源 / 多語境 / 雜訊場景的 real-backend regression wave
+2. release smoke script：一鍵跑 help + integration + real-backend operator QA
 3. 失敗場景 handoff：整理常見錯誤與修復手冊
 4. 若 alias commands 再擴充，README / QUICKSTART / runbook / checklist 要同波更新
 
@@ -88,5 +99,8 @@ video-dub-cli 目前已具備 operator-grade single-command workflow。
 常見 operator 主入口為 `dub en2zh` / `dub ja2zh`；`dub run` 保留作進階底層入口。
 已驗證的支援情境包括 delegate / use-existing / existing-project skip。
 state / validate / integration coverage 已對齊。
-尚未宣稱為 fully productized，因為真實 backend 品質驗證與陌生片源成功率仍待補強。
+`uv sync --extra all` + `dub doctor` 已是 real-backend productization surface：
+real ASR / Gemini / OmniVoice / VoxCPM 所需依賴皆已收斂，`dub doctor` 會自動從
+`~/.zshrc` 復原 Gemini key，並逐 gate 報告每一個 readiness 狀態。
+`dub en2zh` / `dub ja2zh` 已有真實片源 end-to-end QA 紀錄。
 ```
