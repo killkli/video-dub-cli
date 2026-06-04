@@ -28,6 +28,7 @@ not a wave-12 deliverable.
 """
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from typing import Optional
@@ -98,13 +99,19 @@ def build_route(config: DubConfig, source_lang: str = "en") -> ResolvedRoute:
 
 
 def readiness(config: DubConfig) -> TtsReadiness:
-    """Probe OmniVoice readiness. Four gates:
+    """Probe OmniVoice readiness. Five gates:
 
     1. wrapper — the package runner exists in the engines dir
     2. interpreter — the OmniVoice Python interpreter (or the dub
        venv as a fallback) exists and runs
-    3. deps — torch is importable under that interpreter
-    4. model — we deliberately don't probe model cache here; that's
+    3. env:DUB_OMNIVOICE_ROOT — the env var pointing at the OmniVoice
+       dev repo checkout is set and points at a real checkout
+       (the ``omnivoice`` package is not on PyPI, so operators
+       clone the dev repo and point the env var at it). This is
+       the only operator-supplied coupling the repo requires;
+       everything else flows through the package runner.
+    4. deps — torch is importable under that interpreter
+    5. model — we deliberately don't probe model cache here; that's
        a bootstrap step, not a doctor gate.
 
     Skipped gates (e.g. deps when interpreter is missing) are reported
@@ -135,6 +142,32 @@ def readiness(config: DubConfig) -> TtsReadiness:
             f"(OmniVoice's torch deps must be installed there)",
         ))
         interp = fallback
+
+    # Env-var gate: DUB_OMNIVOICE_ROOT (or legacy OMNIVOICE_ROOT)
+    # must point at a real OmniVoice checkout. This is the single
+    # operator-supplied coupling that is unavoidable today (the
+    # omnivoice package is not on PyPI). Report it as a first-class
+    # gate so operators see "missing env" instead of a confusing
+    # import error from the script itself.
+    omni_root = os.environ.get("DUB_OMNIVOICE_ROOT") or os.environ.get("OMNIVOICE_ROOT")
+    if not omni_root:
+        checks.append((
+            "env:DUB_OMNIVOICE_ROOT", "missing",
+            "DUB_OMNIVOICE_ROOT is not set; export it to point at "
+            "the OmniVoice dev repo checkout (the package is not on "
+            "PyPI yet). See `dub bootstrap`.",
+        ))
+    else:
+        root_path = Path(omni_root).expanduser().resolve()
+        marker = root_path / "omnivoice" / "models" / "omnivoice.py"
+        if marker.is_file():
+            checks.append(("env:DUB_OMNIVOICE_ROOT", "ok", str(root_path)))
+        else:
+            checks.append((
+                "env:DUB_OMNIVOICE_ROOT", "missing",
+                f"DUB_OMNIVOICE_ROOT={root_path} does not look like a "
+                f"valid OmniVoice checkout (missing {marker}).",
+            ))
 
     # Probe torch under the chosen interpreter. omnivoice itself may
     # not be on PyPI yet, so we do not require it as a hard gate —

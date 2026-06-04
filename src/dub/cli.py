@@ -551,6 +551,7 @@ def bootstrap():
     click.echo("bootstrap: repo-owned pipeline scripts live under vendor/pipeline_scripts; no extra path config is required")
     click.echo("bootstrap: real backend also needs google-genai for Gemini translation — it is pulled in by `uv sync --extra all`")
     click.echo("bootstrap: OmniVoice route uses the configured Python interpreter (default: python3) with required packages installed")
+    click.echo("bootstrap: OmniVoice also needs DUB_OMNIVOICE_ROOT pointing at a checkout of the OmniVoice dev repo (the package is not on PyPI yet). The legacy OMNIVOICE_ROOT env var name is still accepted. Example: `export DUB_OMNIVOICE_ROOT=$HOME/Dev/OmniVoice`")
     click.echo("bootstrap: VoxCPM route expects the dub venv to include gradio_client + opencc, and a local VoxCPM server on 127.0.0.1:8808")
     click.echo("bootstrap: the only required external secret is GOOGLE_API_KEY / GEMINI_API_KEY")
     click.echo("bootstrap: run `dub doctor` to verify every gate before your first real run")
