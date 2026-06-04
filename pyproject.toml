@@ -64,7 +64,10 @@ tts = [
     "gradio_client>=0.16.0",
 ]
 # OmniVoice backend: the model code is vendored in this repo, but the
-# runtime still needs the heavy inference deps below.
+# runtime still needs the heavy inference deps below. The vendored
+# Stage-05 script also imports ``opencc`` directly for zh text
+# normalization, so the dedicated OmniVoice interpreter must carry it
+# as part of the backend contract.
 tts-omnivoice = [
     "torch>=2.0.0",
     "torchaudio>=2.0.0",
@@ -74,6 +77,7 @@ tts-omnivoice = [
     "numpy>=1.26.0",
     "pydub>=0.25.0",
     "soundfile>=0.12.1",
+    "opencc-python-reimplemented>=0.1.7",
 ]
 # VoxCPM backend: gradio_client + opencc for t2s. There is no
 # second Python interpreter to worry about — VoxCPM runs as a

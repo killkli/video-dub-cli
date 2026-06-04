@@ -97,7 +97,7 @@ def build_route(config: DubConfig, source_lang: str = "en") -> ResolvedRoute:
 
 
 def readiness(config: DubConfig) -> TtsReadiness:
-    """Probe OmniVoice readiness. Four gates:
+    """Probe OmniVoice readiness. Five gates:
 
     1. wrapper — the package runner exists in the engines dir
     2. interpreter — the OmniVoice Python interpreter (or the dub
@@ -105,6 +105,8 @@ def readiness(config: DubConfig) -> TtsReadiness:
     3. deps:torch — torch is importable under that interpreter
     4. deps:omnivoice — the vendored OmniVoice package is importable
        under that interpreter
+    5. deps:opencc — the vendored Stage-05 script imports ``opencc``
+       directly, so the runtime interpreter must provide it
 
     Model weights are deliberately not probed here; that's a bootstrap
     / first-run download concern, not a doctor gate.
@@ -148,11 +150,14 @@ def readiness(config: DubConfig) -> TtsReadiness:
         torch_status = checks[-1][1]
         if torch_status == "ok":
             checks.append(("deps:omnivoice", *diag.python_imports("omnivoice", interpreter=interp)))
+            checks.append(("deps:opencc", *diag.python_imports("opencc", interpreter=interp)))
         else:
             checks.append(("deps:omnivoice", "skipped", "torch missing; can't probe omnivoice"))
+            checks.append(("deps:opencc", "skipped", "torch missing; can't probe opencc"))
     else:
         checks.append(("deps:torch", "skipped", "no interpreter; can't probe"))
         checks.append(("deps:omnivoice", "skipped", "no interpreter; can't probe"))
+        checks.append(("deps:opencc", "skipped", "no interpreter; can't probe"))
 
     ready, detail = diag.aggregate(checks)
     return TtsReadiness(
