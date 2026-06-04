@@ -1,14 +1,15 @@
 """dub.tts_engines.voxcpme — VoxCPM backend adapter.
 
-Stage 5 now shells to a repo-owned package runner at
-``src/dub/tts_engines/voxcpme/runner.py``. That runner forwards CLI argv
-to the vendored heavy-lift script
+Stage 5 shells to the repo-owned package runner at
+``src/dub/tts_engines/voxcpme/runner.py`` (invokable as
+``python -m dub.tts_engines.voxcpme``). That runner forwards CLI
+argv unchanged to the vendored heavy-lift script
 ``vendor/pipeline_scripts/dubbing_batch_tts_vox.py``.
 
 VoxCPM is the Japanese route (ja). Unlike OmniVoice, it has three
 distinct readiness gates:
 
-1. wrapper — the script exists in the engines dir
+1. wrapper — the package runner exists in the engines dir
 2. python deps — ``gradio_client`` (and ``opencc`` for t2s) must be
    importable. These come from the dub venv (not OmniVoice's venv),
    so we probe under ``sys.executable``.
@@ -18,8 +19,8 @@ distinct readiness gates:
 
 The interpreter question is *not* a gate for VoxCPM: the gradio_client
 and opencc packages are pip-installable into the dub venv itself
-(via the proposed ``tts-vox`` extra). So unlike OmniVoice, VoxCPM
-has no "second Python interpreter" requirement.
+(via the ``[tts-vox]`` extra). So unlike OmniVoice, VoxCPM has no
+"second Python interpreter" requirement.
 """
 from __future__ import annotations
 
@@ -28,7 +29,6 @@ from pathlib import Path
 from typing import Optional
 
 from dub.config import DubConfig
-from dub.runtime_paths import pipeline_scripts_dir, repo_root
 from dub.tts_engines import ResolvedRoute, register
 from dub.tts_engines.contract import TtsReadiness, TtsRoute
 from dub.tts_engines import diagnostics as diag
@@ -57,6 +57,12 @@ def find_route(source_lang: str) -> Optional[TtsRoute]:
 
 
 def engines_dir(config: DubConfig) -> Path:
+    """Where the VoxCPM package-owned runner lives.
+
+    Strictly the package directory containing ``runner.py``; we no
+    longer fall back to a legacy ``skills_dir`` location for this
+    adapter.
+    """
     _ = config
     return Path(__file__).resolve().parent
 
@@ -65,15 +71,10 @@ def build_route(config: DubConfig, source_lang: str = "ja") -> ResolvedRoute:
     route = find_route(source_lang)
     if route is None:
         raise KeyError(f"VoxCPM has no route for source_lang={source_lang!r}")
-    scripts_dir = pipeline_scripts_dir()
-    repo_vendored_dir = repo_root() / "vendor" / "pipeline_scripts"
-    config_scripts_dir = Path(config.paths.skills_dir)
-    if scripts_dir != repo_vendored_dir:
-        script_path = scripts_dir / "dubbing_batch_tts_vox.py"
-    elif config_scripts_dir != repo_vendored_dir and (config_scripts_dir / "dubbing_batch_tts_vox.py").exists():
-        script_path = config_scripts_dir / "dubbing_batch_tts_vox.py"
-    else:
-        script_path = engines_dir(config) / route.script_name
+    # Repo-owned entrypoint: the package runner in src/dub/tts_engines/
+    # voxcpme/runner.py. The runner itself forwards argv to the
+    # vendored heavy-lift script under vendor/pipeline_scripts/.
+    script_path = engines_dir(config) / route.script_name
     # VoxCPM has no separate-interpreter requirement; it runs in the
     # dub venv (where gradio_client + opencc are installed via extras).
     interpreter = diag.resolve_interpreter(
@@ -93,7 +94,7 @@ def readiness(config: DubConfig, *, service_host: str = "127.0.0.1",
               service_port: int = 8808) -> TtsReadiness:
     """Probe VoxCPM readiness. Five gates:
 
-    1. wrapper — the script exists in the engines dir
+    1. wrapper — the package runner exists in the engines dir
     2. interpreter — the dub venv interpreter exists
     3. deps:gradio_client — gradio_client is importable
     4. deps:opencc — opencc is importable

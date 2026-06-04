@@ -1,26 +1,29 @@
 """dub.tts_engines — repo-owned TTS backend adapter registry.
 
-The runtime's TTS stage (Stage 5 in `dub.stages.tts`) used to point at
-external skill scripts under ``~/.hermes/skills/media/video-dubbing-pipeline/scripts``.
-This package is the consolidation step: the repo now owns the *adapter*
-contract — which script a route resolves to, which interpreter flag
-it expects, whether it needs a project dir, and what readiness signals
-``dub doctor`` should report.
+The runtime's TTS stage (Stage 5 in ``dub.stages.tts``) used to shell
+out to external skill scripts under
+``~/.hermes/skills/media/video-dubbing-pipeline/scripts``. This
+package is the consolidation step: the repo now owns the *adapter*
+contract — which route serves which source language, which SRT flag
+each route expects, whether it needs a project dir, and what
+readiness signals ``dub doctor`` should report.
 
-The actual heavy-lift TTS scripts (OmniVoice / VoxCPM batch invokers)
-are still kept in the legacy location during the migration window. The
-adapter does not re-vendor them wholesale; it instead resolves them
-through the new ``paths.tts_engines_dir`` config field (defaulting to
-the legacy ``paths.skills_dir`` if the operator has not migrated) and
-exposes a uniform readiness contract.
+The package runners under ``dub.tts_engines.omnivoice`` and
+``dub.tts_engines.voxcpme`` are the canonical entrypoints. Both
+expose ``__main__`` so an operator can invoke them with
+``python -m dub.tts_engines.omnivoice`` /
+``python -m dub.tts_engines.voxcpme``; the runners forward argv
+unchanged to the heavy-lift scripts vendored at
+``vendor/pipeline_scripts/dubbing_batch_tts.py`` and
+``vendor/pipeline_scripts/dubbing_batch_tts_vox.py``.
 
-Long-term target: the scripts themselves become proper Python modules
-under ``dub.tts_engines.omnivoice.runner`` and ``dub.tts_engines.voxcpme.runner``
-and the stage invokes ``python -m dub.tts_engines.omnivoice`` directly,
-killing the legacy skills_dir. R1 in docs/standalone-dependency-map.md
-captures that follow-up. This module ships the adapter surface that
-makes that migration an in-place change to the engine modules without
-touching the stage.
+The vendored scripts are not removed: they carry non-trivial
+atomic-write contracts, ``--start/--end`` support, and per-cue
+error handling that we do not want to re-implement. R1 in
+``docs/standalone-dependency-map.md`` captures the long-term
+target of inlining them into the package proper, but that
+requires the OmniVoice and VoxCPM packages to be importable
+from the dub venv — which is not a wave-12 deliverable.
 """
 from __future__ import annotations
 
@@ -96,15 +99,13 @@ def list_registered() -> list[str]:
 
 
 def engines_dir() -> Path:
-    """Canonical repo-owned TTS runtime script directory.
+    """Backward-compat shim that points at the vendored runtime scripts.
 
-    Operators no longer need to configure ``tts_engines_dir``. Stage 5
-    resolves the runtime wrappers from this repo's vendored pipeline
-    scripts directly.
-
-    We intentionally return ``vendor/pipeline_scripts`` rather than the
-    package directory itself because the heavy-lift wrapper scripts still
-    live there during the migration window.
+    New code should call ``dub.tts_engines.omnivoice.engines_dir()`` or
+    ``dub.tts_engines.voxcpme.engines_dir()`` instead — those return
+    the repo-owned package runner directory for each backend. This
+    shim remains so legacy code that wanted the *vendored* scripts
+    still resolves to a real path on disk.
     """
     pkg_dir = Path(str(resources.files("dub.tts_engines")))
     repo_root = pkg_dir.parents[2]
