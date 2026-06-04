@@ -7,6 +7,7 @@
 #
 # Typical usage (no edits needed):
 #   cp examples/config_en2zh.yaml ~/.config/dub/config.yaml
+#   uv run dub bootstrap-omnivoice --config ~/.config/dub/config.yaml
 #   uv run dub run talk.mp4 --source-lang en --target-lang zh
 #
 # Override guide — uncomment only the lines you actually need to change.

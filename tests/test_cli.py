@@ -1,4 +1,7 @@
+from pathlib import Path
+
 import pytest
+import yaml
 from click.testing import CliRunner
 from dub.cli import main
 from dub.state import load_state
@@ -80,6 +83,52 @@ def test_dub_bootstrap_exits_zero(runner):
     assert "uv sync" in result.output
     assert "repo-owned pipeline scripts live under vendor/pipeline_scripts" in result.output
     assert "the only required external secret is GOOGLE_API_KEY / GEMINI_API_KEY" in result.output
+    assert "bootstrap-omnivoice" in result.output
+
+
+def test_dub_help_lists_bootstrap_omnivoice(runner):
+    result = runner.invoke(main, ["--help"])
+    assert result.exit_code == 0
+    assert "bootstrap-omnivoice" in result.output
+
+
+def test_dub_bootstrap_omnivoice_requires_uv(runner, monkeypatch, tmp_path):
+    monkeypatch.setattr("dub.cli.shutil.which", lambda name: None if name == "uv" else "/usr/bin/true")
+    result = runner.invoke(
+        main,
+        ["bootstrap-omnivoice", "--venv-path", str(tmp_path / "ov-venv"), "--config", str(tmp_path / "cfg.yaml")],
+    )
+    assert result.exit_code != 0
+    assert "requires `uv` on PATH" in result.output
+
+
+def test_dub_bootstrap_omnivoice_updates_config(runner, monkeypatch, tmp_path):
+    calls = []
+
+    def fake_run(cmd, check, cwd):
+        calls.append((cmd, check, cwd))
+        if cmd[1] == "venv":
+            venv_dir = Path(cmd[2])
+            (venv_dir / "bin").mkdir(parents=True, exist_ok=True)
+            (venv_dir / "bin" / "python").write_text("#!/bin/sh\n", encoding="utf-8")
+        return None
+
+    monkeypatch.setattr("dub.cli.shutil.which", lambda name: "/opt/homebrew/bin/uv" if name == "uv" else None)
+    monkeypatch.setattr("dub.cli.subprocess.run", fake_run)
+
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text("translation:\n  provider: gemini\n", encoding="utf-8")
+    venv_dir = tmp_path / "ov-venv"
+    result = runner.invoke(
+        main,
+        ["bootstrap-omnivoice", "--venv-path", str(venv_dir), "--config", str(cfg)],
+    )
+    assert result.exit_code == 0
+    data = yaml.safe_load(cfg.read_text(encoding="utf-8"))
+    assert data["paths"]["omnivoice_python"] == str((venv_dir / "bin" / "python").resolve())
+    assert any(cmd[0][1] == "venv" for cmd in calls)
+    assert any(cmd[0][1:4] == ["pip", "install", "--python"] for cmd in calls)
+    assert "wrote paths.omnivoice_python" in result.output
 
 
 def test_dub_doctor_reports_missing_prereqs(runner, tmp_path, monkeypatch):

@@ -6,6 +6,7 @@ import subprocess
 from pathlib import Path
 
 import click
+import yaml
 
 from dub.config import load_config
 from dub.errors import UserError
@@ -153,6 +154,33 @@ def _env_status(*names: str) -> tuple[bool, str]:
     if found:
         return True, ",".join(found)
     return False, ",".join(ordered)
+
+
+def _default_operator_config_path() -> Path:
+    return Path.home() / ".config" / "dub" / "config.yaml"
+
+
+def _load_yaml_dict(path: Path) -> dict:
+    if not path.exists():
+        return {}
+    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise UserError(f"config file must be a YAML mapping: {path}")
+    return raw
+
+
+def _write_yaml_dict(path: Path, data: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        yaml.safe_dump(data, sort_keys=False, allow_unicode=True),
+        encoding="utf-8",
+    )
+
+
+def _venv_python(venv_dir: Path) -> Path:
+    return venv_dir / "bin" / "python"
 
 
 # Names of secrets we know how to auto-recover from the user's interactive
@@ -552,6 +580,60 @@ def bootstrap():
     click.echo("bootstrap: real backend also needs google-genai for Gemini translation — it is pulled in by `uv sync --extra all`")
     click.echo("bootstrap: OmniVoice route uses the configured Python interpreter (default: python3) with required packages installed")
     click.echo("bootstrap: OmniVoice model code is vendored in this repo; install its runtime deps in the configured OmniVoice interpreter with `uv sync --extra tts-omnivoice`")
+    click.echo("bootstrap: or run `dub bootstrap-omnivoice` to create a dedicated interpreter and wire paths.omnivoice_python automatically")
     click.echo("bootstrap: VoxCPM route expects the dub venv to include gradio_client + opencc, and a local VoxCPM server on 127.0.0.1:8808")
     click.echo("bootstrap: the only required external secret is GOOGLE_API_KEY / GEMINI_API_KEY")
     click.echo("bootstrap: run `dub doctor` to verify every gate before your first real run")
+
+
+@main.command(name="bootstrap-omnivoice")
+@click.option(
+    "--venv-path",
+    type=click.Path(path_type=Path),
+    default=Path(".venvs") / "omnivoice",
+    show_default=True,
+    help="Target virtualenv directory for the dedicated OmniVoice interpreter.",
+)
+@click.option(
+    "--config",
+    "config_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="YAML config file to update with paths.omnivoice_python (default: ~/.config/dub/config.yaml).",
+)
+def bootstrap_omnivoice(venv_path, config_path):
+    """Create/update a dedicated OmniVoice venv and wire config automatically."""
+    repo_root = Path(__file__).resolve().parents[2]
+    uv_bin = shutil.which("uv")
+    if not uv_bin:
+        raise click.ClickException("bootstrap-omnivoice requires `uv` on PATH")
+
+    venv_path = venv_path.expanduser().resolve()
+    config_path = (config_path or _default_operator_config_path()).expanduser().resolve()
+
+    click.echo(f"bootstrap-omnivoice: repo={repo_root}")
+    click.echo(f"bootstrap-omnivoice: target_venv={venv_path}")
+    click.echo(f"bootstrap-omnivoice: config={config_path}")
+
+    subprocess.run([uv_bin, "venv", str(venv_path)], check=True, cwd=str(repo_root))
+    py = _venv_python(venv_path)
+    if not py.exists():
+        raise click.ClickException(f"bootstrap-omnivoice created no python at {py}")
+
+    subprocess.run(
+        [uv_bin, "pip", "install", "--python", str(py), "-e", ".[tts-omnivoice]"],
+        check=True,
+        cwd=str(repo_root),
+    )
+
+    data = _load_yaml_dict(config_path)
+    paths = data.get("paths") or {}
+    if not isinstance(paths, dict):
+        raise UserError(f"config paths section must be a YAML mapping: {config_path}")
+    paths["omnivoice_python"] = str(py)
+    data["paths"] = paths
+    _write_yaml_dict(config_path, data)
+
+    click.echo(f"bootstrap-omnivoice: installed video-dub-cli[tts-omnivoice] into {venv_path}")
+    click.echo(f"bootstrap-omnivoice: wrote paths.omnivoice_python={py} into {config_path}")
+    click.echo(f"bootstrap-omnivoice: next run `uv run dub doctor --config {config_path}`")
