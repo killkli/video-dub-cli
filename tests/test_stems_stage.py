@@ -20,3 +20,12 @@ def test_run_uses_repo_owned_stems_script(tmp_path):
 
     assert state.status == "failed"
     assert "exit" in (state.error or "")
+
+
+def test_package_stems_stage_exports_real_implementation():
+    from dub.stages import StemsStage as package_stage
+    from dub.stages.base import StemsStage as base_stage
+    from dub.stages.stems import StemsStage as real_stage
+
+    assert package_stage is real_stage
+    assert package_stage is not base_stage

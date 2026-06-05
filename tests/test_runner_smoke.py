@@ -53,7 +53,12 @@ def mock_external_cli_for_smoke(monkeypatch):
                 (out_dir / f"line_{i}_ref.wav").write_bytes(b"\\x00" * 4096)
             return subprocess.CompletedProcess(cmd, 0)
 
-        if any("dubbing_batch_tts.py" in s for s in cmd_strs) or any("dubbing_batch_tts_vox.py" in s for s in cmd_strs):
+        is_tts_runner = (
+            any("dubbing_batch_tts.py" in s for s in cmd_strs)
+            or any("dubbing_batch_tts_vox.py" in s for s in cmd_strs)
+            or any(str(s).endswith("/omnivoice-python") or str(s) == "omnivoice-python" for s in cmd_strs)
+        )
+        if is_tts_runner:
             out_idx = cmd_strs.index("--out-dir")
             out_dir = Path(cmd_strs[out_idx + 1])
             out_dir.mkdir(parents=True, exist_ok=True)
@@ -127,6 +132,7 @@ def config(tmp_path):
         fake_scripts / "dubbing_remix.py",
     ]:
         rel.write_text("#!/usr/bin/env python3\n")
+        rel.chmod(0o755)
 
     return config_module.DubConfig.model_validate({
         "paths": {
