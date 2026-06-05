@@ -68,8 +68,8 @@ uv run dub validate --project-dir /path/to/project
 
 - `ffmpeg` / `ffprobe`
 - Gemini API key
-- VoxCPM 路線：標準 `uv sync --extra all` 即可支援 `ja2zh`；若要獨立 VoxCPM interpreter，跑 `dub bootstrap-voxcpm`
-- 若 `dub doctor` 顯示 `service` 缺失，仍需啟動本機 VoxCPM 服務（`127.0.0.1:8808`）
+- VoxCPM 路線：`ja2zh` 現在使用 repo 內打包版 server entrypoint；`~/.config/dub/config.yaml` 應將 `paths.voxcpme_python` 指到 `/Users/johnchen/.hermes/projects/video-dub-cli/.venvs/voxcpm/bin/python`
+- 若 `dub doctor` 顯示 `service` 缺失，請在 repo 內啟動本機 VoxCPM 服務：`cd /Users/johnchen/.hermes/projects/video-dub-cli && PYTHONPATH=/Users/johnchen/.hermes/projects/video-dub-cli/src .venvs/voxcpm/bin/python src/dub/tts_engines/voxcpme/server.py --port 8808`
 - OmniVoice（若要使用；由 `dub bootstrap-omnivoice` 自動建立專用環境）
 
 ---

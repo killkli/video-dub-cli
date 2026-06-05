@@ -13,6 +13,17 @@ def runner():
     return CliRunner()
 
 
+def _minimal_ready_paths_yaml() -> str:
+    return (
+        "paths:\n"
+        "  qwenasr_cli: /bin/true\n"
+        "  omnivoice_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/omnivoice/bin/python\n"
+        "  voxcpme_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/voxcpm/bin/python\n"
+        "  skills_dir: /tmp/vendor/pipeline_scripts\n"
+        "  translation_skill: /bin/true\n"
+    )
+
+
 def test_dub_help_exits_zero(runner):
     result = runner.invoke(main, ["--help"])
     assert result.exit_code == 0
@@ -233,7 +244,8 @@ def test_dub_doctor_reports_omnivoice_opencc_gate(runner, tmp_path, monkeypatch)
     cfg.write_text(
         "paths:\n"
         "  qwenasr_cli: /bin/true\n"
-        "  omnivoice_python: /bin/true\n"
+        "  omnivoice_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/omnivoice/bin/python\n"
+        "  voxcpme_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/voxcpm/bin/python\n"
         "  skills_dir: /tmp/vendor/pipeline_scripts\n"
         "  translation_skill: /bin/true\n",
         encoding="utf-8",
@@ -243,6 +255,7 @@ def test_dub_doctor_reports_omnivoice_opencc_gate(runner, tmp_path, monkeypatch)
 
     assert result.exit_code == 0, result.output
     assert "deps:opencc:" in result.output
+    assert "omnivoice: READY" in result.output
 
 
 def test_auto_recover_missing_secrets_reads_zshrc(monkeypatch, tmp_path):
@@ -406,7 +419,8 @@ def test_dub_run_use_existing_requires_translated_srt(runner, tmp_path):
     cfg.write_text(
         "paths:\n"
         "  qwenasr_cli: /bin/true\n"
-        "  omnivoice_python: /bin/true\n"
+        "  omnivoice_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/omnivoice/bin/python\n"
+        "  voxcpme_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/voxcpm/bin/python\n"
         "  skills_dir: /tmp/vendor/pipeline_scripts\n"
         "  translation_skill: /bin/true\n",
         encoding="utf-8",
@@ -433,7 +447,8 @@ def test_dub_run_skip_requires_existing_project_translated_srt(runner, tmp_path)
     cfg.write_text(
         "paths:\n"
         "  qwenasr_cli: /bin/true\n"
-        "  omnivoice_python: /bin/true\n"
+        "  omnivoice_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/omnivoice/bin/python\n"
+        "  voxcpme_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/voxcpm/bin/python\n"
         "  skills_dir: /tmp/vendor/pipeline_scripts\n"
         "  translation_skill: /bin/true\n",
         encoding="utf-8",
@@ -463,7 +478,8 @@ def test_dub_run_persists_translate_mode_and_translated_srt(runner, tmp_path, mo
     cfg.write_text(
         "paths:\n"
         "  qwenasr_cli: /bin/true\n"
-        "  omnivoice_python: /bin/true\n"
+        "  omnivoice_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/omnivoice/bin/python\n"
+        "  voxcpme_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/voxcpm/bin/python\n"
         "  skills_dir: /tmp/vendor/pipeline_scripts\n"
         "  translation_skill: /bin/true\n",
         encoding="utf-8",
@@ -502,7 +518,8 @@ def test_dub_en2zh_alias_sets_languages_and_completes(runner, tmp_path, monkeypa
     cfg.write_text(
         "paths:\n"
         "  qwenasr_cli: /bin/true\n"
-        "  omnivoice_python: /bin/true\n"
+        "  omnivoice_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/omnivoice/bin/python\n"
+        "  voxcpme_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/voxcpm/bin/python\n"
         "  skills_dir: /tmp/vendor/pipeline_scripts\n"
         "  translation_skill: /bin/true\n",
         encoding="utf-8",
@@ -540,7 +557,8 @@ def test_dub_ja2zh_alias_sets_languages_and_completes(runner, tmp_path, monkeypa
     cfg.write_text(
         "paths:\n"
         "  qwenasr_cli: /bin/true\n"
-        "  omnivoice_python: /bin/true\n"
+        "  omnivoice_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/omnivoice/bin/python\n"
+        "  voxcpme_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/voxcpm/bin/python\n"
         "  skills_dir: /tmp/vendor/pipeline_scripts\n"
         "  translation_skill: /bin/true\n",
         encoding="utf-8",
@@ -578,7 +596,8 @@ def test_dub_auto_uses_explicit_source_lang_and_completes(runner, tmp_path, monk
     cfg.write_text(
         "paths:\n"
         "  qwenasr_cli: /bin/true\n"
-        "  omnivoice_python: /bin/true\n"
+        "  omnivoice_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/omnivoice/bin/python\n"
+        "  voxcpme_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/voxcpm/bin/python\n"
         "  skills_dir: /tmp/vendor/pipeline_scripts\n"
         "  translation_skill: /bin/true\n",
         encoding="utf-8",
@@ -664,7 +683,8 @@ def _patch_pipeline_and_input_info(monkeypatch, project_dir):
 def _write_minimal_auto_cfg(cfg: Path, *, with_defaults_source_lang: bool = False) -> None:
     body = ["paths:"]
     body.append("  qwenasr_cli: /bin/true")
-    body.append("  omnivoice_python: /bin/true")
+    body.append("  omnivoice_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/omnivoice/bin/python")
+    body.append("  voxcpme_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/voxcpm/bin/python")
     body.append("  skills_dir: /tmp/vendor/pipeline_scripts")
     body.append("  translation_skill: /bin/true")
     if with_defaults_source_lang:
@@ -1031,7 +1051,8 @@ def test_dub_run_prints_preflight_route_summary(runner, tmp_path, monkeypatch):
     cfg.write_text(
         "paths:\n"
         "  qwenasr_cli: /bin/true\n"
-        "  omnivoice_python: /bin/true\n"
+        "  omnivoice_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/omnivoice/bin/python\n"
+        "  voxcpme_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/voxcpm/bin/python\n"
         "  skills_dir: /tmp/vendor/pipeline_scripts\n"
         "  translation_skill: /bin/true\n",
         encoding="utf-8",
@@ -1136,7 +1157,8 @@ def test_dub_run_use_existing_fails_with_nonexistent_translated_srt_path(runner,
     cfg.write_text(
         "paths:\n"
         "  qwenasr_cli: /bin/true\n"
-        "  omnivoice_python: /bin/true\n"
+        "  omnivoice_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/omnivoice/bin/python\n"
+        "  voxcpme_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/voxcpm/bin/python\n"
         "  skills_dir: /tmp/vendor/pipeline_scripts\n"
         "  translation_skill: /bin/true\n",
         encoding="utf-8",
@@ -1170,7 +1192,8 @@ def test_dub_run_skip_succeeds_when_project_already_has_translated_srt(runner, t
     cfg.write_text(
         "paths:\n"
         "  qwenasr_cli: /bin/true\n"
-        "  omnivoice_python: /bin/true\n"
+        "  omnivoice_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/omnivoice/bin/python\n"
+        "  voxcpme_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/voxcpm/bin/python\n"
         "  skills_dir: /tmp/vendor/pipeline_scripts\n"
         "  translation_skill: /bin/true\n",
         encoding="utf-8",
@@ -1207,7 +1230,8 @@ def test_dub_run_accepts_video_already_at_project_canonical_path(runner, tmp_pat
     cfg.write_text(
         "paths:\n"
         "  qwenasr_cli: /bin/true\n"
-        "  omnivoice_python: /bin/true\n"
+        "  omnivoice_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/omnivoice/bin/python\n"
+        "  voxcpme_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/voxcpm/bin/python\n"
         "  skills_dir: /tmp/vendor/pipeline_scripts\n"
         "  translation_skill: /bin/true\n",
         encoding="utf-8",
@@ -1243,7 +1267,8 @@ def test_dub_run_prints_delegate_preflight_summary(runner, tmp_path, monkeypatch
     cfg.write_text(
         "paths:\n"
         "  qwenasr_cli: /bin/true\n"
-        "  omnivoice_python: /bin/true\n"
+        "  omnivoice_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/omnivoice/bin/python\n"
+        "  voxcpme_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/voxcpm/bin/python\n"
         "  skills_dir: /tmp/vendor/pipeline_scripts\n"
         "  translation_skill: /bin/true\n",
         encoding="utf-8",
@@ -1285,7 +1310,8 @@ def test_dub_run_prints_use_existing_preflight_summary(runner, tmp_path, monkeyp
     cfg.write_text(
         "paths:\n"
         "  qwenasr_cli: /bin/true\n"
-        "  omnivoice_python: /bin/true\n"
+        "  omnivoice_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/omnivoice/bin/python\n"
+        "  voxcpme_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/voxcpm/bin/python\n"
         "  skills_dir: /tmp/vendor/pipeline_scripts\n"
         "  translation_skill: /bin/true\n",
         encoding="utf-8",
@@ -1326,7 +1352,8 @@ def test_dub_run_prints_skip_preflight_summary(runner, tmp_path, monkeypatch):
     cfg.write_text(
         "paths:\n"
         "  qwenasr_cli: /bin/true\n"
-        "  omnivoice_python: /bin/true\n"
+        "  omnivoice_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/omnivoice/bin/python\n"
+        "  voxcpme_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/voxcpm/bin/python\n"
         "  skills_dir: /tmp/vendor/pipeline_scripts\n"
         "  translation_skill: /bin/true\n",
         encoding="utf-8",
@@ -1429,6 +1456,41 @@ def test_dub_doctor_fails_when_any_route_backend_is_blocked(runner, monkeypatch)
     assert "ready for `dub auto`, `dub en2zh`, `dub ja2zh`" not in result.output
 
 
+def test_dub_doctor_fails_when_vox_service_is_only_warn(runner, monkeypatch):
+    """Regression: a route with service=warn must not still surface as fully
+    ready for end-to-end runs. Otherwise doctor prints a false green and the
+    real ja2zh run dies at stage 05 with ConnectionRefusedError.
+    """
+    import dub.cli as cli_mod
+    from dub.tts_engines.contract import TtsReadiness
+
+    monkeypatch.setattr("dub.cli._auto_recover_missing_secrets", lambda: [])
+    monkeypatch.setattr("dub.cli._which_status", lambda _name: (True, "/bin/fake"))
+    monkeypatch.setattr("dub.cli._path_status", lambda _p: (True, "/fake/path"))
+    monkeypatch.setattr("dub.cli._env_status", lambda *_names: (True, "GOOGLE_API_KEY"))
+    monkeypatch.setattr("dub.tts_engines.diagnostics.python_imports", lambda _name: ("ok", "/fake/import/path.py"))
+
+    ready_omni = TtsReadiness(backend="omnivoice", ready=True, detail="ready", checks=[])
+    warn_vox = TtsReadiness(
+        backend="voxcpme",
+        ready=True,
+        detail="warn: service",
+        checks=[("service", "warn", "127.0.0.1:8808 unreachable")],
+    )
+    monkeypatch.setattr(cli_mod, "omnivoice_readiness", lambda _cfg: ready_omni)
+    monkeypatch.setattr(cli_mod, "voxcpme_readiness", lambda _cfg: warn_vox)
+    monkeypatch.setattr(cli_mod, "builtin_backends", lambda: ("omnivoice", "voxcpme"))
+
+    result = runner.invoke(main, ["doctor"])
+    assert result.exit_code != 0, result.output
+    assert "doctor found missing prerequisites" in result.output
+    assert "doctor lanes:" in result.output
+    assert "ready=`dub en2zh`" in result.output
+    assert "blocked=`dub ja2zh`" in result.output
+    assert "service: warn" in result.output
+    assert "ready for `dub auto`, `dub en2zh`, `dub ja2zh`" not in result.output
+
+
 def test_dub_doctor_failure_message_still_names_lane(runner, monkeypatch, tmp_path):
     """AC-3: when prerequisites are missing, the failure path should still
     name the lane in the message that surfaces, so the operator knows which
@@ -1438,7 +1500,8 @@ def test_dub_doctor_failure_message_still_names_lane(runner, monkeypatch, tmp_pa
     cfg.write_text(
         "paths:\n"
         "  qwenasr_cli: /bin/true\n"
-        "  omnivoice_python: /bin/true\n"
+        "  omnivoice_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/omnivoice/bin/python\n"
+        "  voxcpme_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/voxcpm/bin/python\n"
         "  skills_dir: /tmp/vendor/pipeline_scripts\n"
         "  translation_skill: /bin/true\n",
         encoding="utf-8",
@@ -1507,7 +1570,8 @@ def test_en2zh_zero_flag_invocation_lands_project_next_to_video(
     cfg.write_text(
         "paths:\n"
         "  qwenasr_cli: /bin/true\n"
-        "  omnivoice_python: /bin/true\n"
+        "  omnivoice_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/omnivoice/bin/python\n"
+        "  voxcpme_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/voxcpm/bin/python\n"
         "  skills_dir: /tmp/vendor/pipeline_scripts\n"
         "  translation_skill: /bin/true\n",
         encoding="utf-8",
@@ -1544,7 +1608,8 @@ def test_ja2zh_zero_flag_invocation_lands_project_next_to_video(
     cfg.write_text(
         "paths:\n"
         "  qwenasr_cli: /bin/true\n"
-        "  omnivoice_python: /bin/true\n"
+        "  omnivoice_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/omnivoice/bin/python\n"
+        "  voxcpme_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/voxcpm/bin/python\n"
         "  skills_dir: /tmp/vendor/pipeline_scripts\n"
         "  translation_skill: /bin/true\n",
         encoding="utf-8",
@@ -1576,7 +1641,8 @@ def test_en2zh_explicit_project_dir_still_wins(runner, tmp_path, monkeypatch):
     cfg.write_text(
         "paths:\n"
         "  qwenasr_cli: /bin/true\n"
-        "  omnivoice_python: /bin/true\n"
+        "  omnivoice_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/omnivoice/bin/python\n"
+        "  voxcpme_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/voxcpm/bin/python\n"
         "  skills_dir: /tmp/vendor/pipeline_scripts\n"
         "  translation_skill: /bin/true\n",
         encoding="utf-8",
@@ -1628,7 +1694,8 @@ def _write_minimal_config(path: Path) -> None:
     path.write_text(
         "paths:\n"
         "  qwenasr_cli: /bin/true\n"
-        "  omnivoice_python: /bin/true\n"
+        "  omnivoice_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/omnivoice/bin/python\n"
+        "  voxcpme_python: /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/voxcpm/bin/python\n"
         "  skills_dir: /tmp/vendor/pipeline_scripts\n"
         "  translation_skill: /bin/true\n",
         encoding="utf-8",

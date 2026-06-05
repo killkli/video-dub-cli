@@ -1044,8 +1044,10 @@ def doctor(config_path):
         status = "READY" if readiness.ready else "BLOCKED"
         click.echo(f"  {backend_name}: {status} ({readiness.detail})")
         route_name = backend_to_route.get(backend_name)
+        gate_warned = any(gate_status == "warn" for _gate, gate_status, _detail in readiness.checks)
+        route_usable = readiness.ready and not gate_warned
         if route_name is not None:
-            if readiness.ready:
+            if route_usable:
                 ready_routes.append(route_name)
             else:
                 blocked_routes.append(route_name)
@@ -1085,7 +1087,7 @@ def bootstrap():
     click.echo("bootstrap: or run `dub bootstrap-omnivoice` to create a dedicated interpreter and wire paths.omnivoice_python automatically")
     click.echo("bootstrap: VoxCPM route also uses a dedicated Python interpreter when fully productized")
     click.echo("bootstrap: run `dub bootstrap-voxcpm` to create a dedicated interpreter and wire paths.voxcpme_python automatically")
-    click.echo("bootstrap: VoxCPM still requires a local server on 127.0.0.1:8808 until the repo-owned server entrypoint is fully wired")
+    click.echo("bootstrap: VoxCPM requires a local server on 127.0.0.1:8808; the canonical entrypoint is this repo's `src/dub/tts_engines/voxcpme/server.py`")
     click.echo("bootstrap: the only required external secret is GOOGLE_API_KEY / GEMINI_API_KEY")
     click.echo("bootstrap: run `dub doctor` to verify every gate before your first real run")
 
@@ -1200,5 +1202,5 @@ def bootstrap_voxcpm(venv_path, config_path):
     )
     click.echo(f"bootstrap-voxcpm: installed video-dub-cli[tts-vox] into {venv_path}")
     click.echo(f"bootstrap-voxcpm: wrote paths.voxcpme_python={py} into {config_path}")
-    click.echo("bootstrap-voxcpm: note the local server still needs to be started separately until the repo-owned server entrypoint lands")
+    click.echo("bootstrap-voxcpm: note the local server must still be started separately; use this repo's `src/dub/tts_engines/voxcpme/server.py --port 8808`")
     click.echo(f"bootstrap-voxcpm: next run `uv run dub doctor --config {config_path}`")

@@ -15,8 +15,9 @@ class StemsStage(Stage):
     name = "01_stems"
 
     def is_done(self, project_dir: Path) -> bool:
-        vocals = project_dir / "02_stems" / "video.vocals.wav"
-        return vocals.exists() and vocals.stat().st_mtime > (project_dir / "01_raw_video" / "video.mp4").stat().st_mtime
+        vocals = project_dir / "02_stems" / "video.mp4.vocals.wav"
+        video = project_dir / "01_raw_video" / "video.mp4"
+        return vocals.exists() and vocals.stat().st_mtime > video.stat().st_mtime
 
     def run(self, project_dir: Path, config: DubConfig) -> StageState:
         state = StageState(name=self.name, status="running", started_at=now_iso())
