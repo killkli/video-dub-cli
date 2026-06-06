@@ -10,6 +10,7 @@ htmlcov/
 *.swp
 *.swo
 .DS_Store
+.omc/
 .tmp_operator_qa/
 local/
 *.local.yaml
