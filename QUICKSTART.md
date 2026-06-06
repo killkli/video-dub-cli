@@ -214,4 +214,3 @@ uv run dub doctor --config ~/.config/dub/config.yaml
 ```
 
 完整故障排除請看 `docs/operator-runbook.md`。
-若你接手的是這台已配置完成的本機，另看 `docs/local-operator-handoff-2026-06-05.md`。

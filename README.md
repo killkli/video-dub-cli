@@ -69,7 +69,7 @@ uv run dub validate --project-dir /path/to/project
 - `ffmpeg` / `ffprobe`
 - Gemini API key
 - VoxCPM 路線：先執行 `uv run dub bootstrap-voxcpm` 建立 / 更新專用 interpreter，再用 `uv run dub doctor` 確認 `ja2zh` lane readiness
-- 若 `dub doctor` 顯示 `voxcpme service` 缺失，請依 `docs/operator-runbook.md` 啟動本機 VoxCPM 服務；若你接手的是**這台已配置好的本機**，可直接看 `docs/local-operator-handoff-2026-06-05.md`
+- 若 `dub doctor` 顯示 `voxcpme service` 缺失，請依 `docs/operator-runbook.md` 啟動本機 VoxCPM 服務
 - OmniVoice（若要使用；由 `dub bootstrap-omnivoice` 自動建立專用環境）
 
 ---
@@ -278,8 +278,7 @@ uv run dub doctor --config ~/.config/dub/config.yaml
 ## 文件索引
 
 - `QUICKSTART.md`：5 分鐘上手
-- `docs/operator-runbook.md`：故障排除與恢復流程
-- `docs/local-operator-handoff-2026-06-05.md`：**本機接手補充說明**（只適用於目前已配置好的這台機器）
+- `docs/operator-runbook.md`：故障排除與恢復流程（含 `voxcpme service` 啟動步驟）
 - `docs/qa-auto-workflow-acceptance-criteria-2026-06-04.md`：auto-workflow 驗收標準（T2 QA 定義）
 - `docs/auto-workflow-contract-2026-06-04.md`：operator 合約（T0 gate）
 - `docs/operator-qa-real-backend-en2zh-2026-06-03.md`：英文→中文真實驗證
