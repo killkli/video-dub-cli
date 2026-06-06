@@ -147,6 +147,40 @@ def main() -> None:
         "shutil.copy2(src, dst)\n",
     )
 
+    # Fake dubbing_stems.py — same contract as the conftest seam:
+    #   - accepts <project_dir> [video_filename] (default video.mp4)
+    #   - writes 02_stems/<video>.vocals.wav + <video>.instrumental.wav
+    #   - bumps mtime past the source video so StemsStage.is_done()
+    #     returns True on subsequent operator-flow invocations
+    # We can't run the real Demucs / vocal-remover stack inside the
+    # operator-flow test; this stub matches the artefact contract the
+    # downstream stages (assemble) probe for.
+    write_exe(
+        SKILLS / "dubbing_stems.py",
+        "#!/usr/bin/env python3\n"
+        "import argparse, os, sys\n"
+        "from pathlib import Path\n"
+        "p = argparse.ArgumentParser()\n"
+        "p.add_argument('project_dir')\n"
+        "p.add_argument('video_filename', nargs='?', default='video.mp4')\n"
+        "p.add_argument('--stems', default='all')\n"
+        "p.add_argument('--model', default=None)\n"
+        "args = p.parse_args()\n"
+        "project = Path(args.project_dir).resolve()\n"
+        "video = project / '01_raw_video' / args.video_filename\n"
+        "stems_dir = project / '02_stems'\n"
+        "stems_dir.mkdir(parents=True, exist_ok=True)\n"
+        "if not video.exists():\n"
+        "    sys.exit(2)\n"
+        "vocals = stems_dir / f'{args.video_filename}.vocals.wav'\n"
+        "instrumental = stems_dir / f'{args.video_filename}.instrumental.wav'\n"
+        "vocals.write_bytes(b'\\x00' * 2048)\n"
+        "instrumental.write_bytes(b'\\x00' * 2048)\n"
+        "src_mtime = video.stat().st_mtime\n"
+        "for stub in (vocals, instrumental):\n"
+        "    os.utime(stub, (src_mtime + 1, src_mtime + 1))\n",
+    )
+
     translator = OUT / "fake_translate.py"
     translator.write_text(
         "from pathlib import Path\n"
