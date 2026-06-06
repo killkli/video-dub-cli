@@ -884,7 +884,12 @@ def test_dub_auto_emits_probe_progress_line_on_no_flag_path(
     # _resolve_auto_route(), so the chronological ordering is enforced
     # at the call site — not something the test needs to re-prove by
     # scanning across streams.
-    assert "auto-detect" not in result.stdout
+    #
+    # Pin the *full* "auto-detect:" probe-progress prefix so we do not
+    # false-positive on the Phase 1A human-readable route summary's
+    # "auto-detected (basis=...)" fragment, which now legitimately
+    # appears on stdout.
+    assert "auto-detect:" not in result.stdout
     # Preflight itself still appears in stdout, not stderr.
     assert "route_basis=detected" in result.stdout
 

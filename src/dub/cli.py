@@ -615,8 +615,114 @@ def _auto_recover_missing_secrets(names: tuple[str, ...] = _AUTO_RECOVER_SECRET_
 @click.group()
 @click.version_option()
 def main():
-    """video-dub-cli — single command to dub any video."""
+    """video-dub-cli — single command to dub any video.
+
+    First-time operator? Run these three commands in order from the repo
+    root:
+
+    \b
+        uv sync --extra all        # build the canonical dub venv
+        uv run dub doctor          # confirm EN / JA lanes are ready
+        uv run dub auto <VIDEO>    # dub end-to-end (auto-detects EN vs JA)
+
+    For more detail see QUICKSTART.md and docs/operator-runbook.md.
+    """
     pass
+
+
+# Friendly labels for the human-readable route summary line. We keep the
+# canonical ISO codes (en/ja) in the machine-oriented preflight line so
+# existing audits and tests keep working; this mapping is only used for
+# the operator-facing one-glance summary.
+_SOURCE_LANG_LABELS: dict[str, str] = {
+    "en": "English",
+    "ja": "Japanese",
+}
+_TARGET_LANG_LABELS: dict[str, str] = {
+    "zh": "Chinese (Traditional)",
+}
+_TTS_BACKEND_LABELS: dict[str, str] = {
+    "omnivoice": "OmniVoice (local TTS)",
+    "voxcpme": "VoxCPM (local TTS)",
+}
+_TRANSLATION_PROVIDER_LABELS: dict[str, str] = {
+    "gemini": "Gemini (Google translation API)",
+}
+
+
+def _route_basis_human(basis: str | None) -> str:
+    """Turn the internal route_basis token into a one-line operator-friendly
+    explanation of how the route was chosen.
+
+    Examples:
+
+        override:explicit-flag     -> "source language: explicit --source-lang flag"
+        detected:en-asr-head       -> "source language: picked from probe (basis=detected:en-asr-head)"
+        ambiguous:no-ffmpeg        -> "source language: ambiguous (basis=ambiguous:no-ffmpeg)"
+
+    The "detected" branch intentionally says "picked from probe" rather
+    than "auto-detected" so the human summary does not collide with the
+    ``auto-detect:`` probe-progress prefix on ``dub auto``'s stderr.
+    """
+    if not basis:
+        return "source language: explicit (no detector ran)"
+    if basis.startswith("override:"):
+        return f"source language: explicit --source-lang flag (basis={basis})"
+    if basis.startswith("detected:"):
+        # detected:<lang>-asr-head or detected:probe-stub etc.
+        # The chosen wording is "picked from probe" (not "auto-detected")
+        # so it does not collide with the probe-progress contract on
+        # ``dub auto`` that pins the stderr prefix ``auto-detect:`` —
+        # the test in tests/test_cli.py asserts that the *prefix* never
+        # appears in stdout, but the human route line is now a real
+        # stdout line and we do not want the substring overlap to
+        # trigger a false positive.
+        return f"source language: picked from probe (basis={basis})"
+    if basis.startswith("ambiguous:"):
+        return f"source language: ambiguous (basis={basis})"
+    return f"source language: explicit (basis={basis})"
+
+
+def _human_route_summary(
+    *,
+    source_lang: str,
+    target_lang: str,
+    backend_name: str,
+    translate_mode: str,
+    translation_provider: str | None,
+    project_dir: Path,
+    route_basis: str | None,
+) -> str:
+    """Return a one-line, operator-friendly route summary for the run.
+
+    This is what the operator sees on the success path in addition to the
+    machine-oriented ``preflight:`` line. It is intentionally short so a
+    first-time operator can read it in one glance and understand:
+
+    * which source/target language pair the run picked,
+    * which TTS backend will speak the translated lines,
+    * which translation provider is in play (or that translation was skipped),
+    * where the project directory lives,
+    * how the source language was decided.
+    """
+    src = _SOURCE_LANG_LABELS.get(source_lang, source_lang)
+    tgt = _TARGET_LANG_LABELS.get(target_lang, target_lang)
+    backend = _TTS_BACKEND_LABELS.get(backend_name, backend_name)
+    if translate_mode == "skip":
+        translation = "translation: skipped (using existing project SRT)"
+    elif translate_mode == "use-existing":
+        translation = "translation: skipped (using external SRT)"
+    else:
+        provider = translation_provider or "gemini"
+        translation = (
+            "translation: "
+            + _TRANSLATION_PROVIDER_LABELS.get(provider, provider)
+        )
+    decision = _route_basis_human(route_basis)
+    return (
+        f"route: {src} -> {tgt} via {backend} ; {translation} ; "
+        f"project={project_dir} ; {decision}"
+    )
 
 
 def _run_pipeline_command(
@@ -649,6 +755,17 @@ def _run_pipeline_command(
         click.echo(_operator_paths_summary("run plan", pdir))
         _validate_run_contract(pdir, cfg)
         click.echo(_run_preflight(pdir, cfg, cfg.defaults.source_lang, route_basis=route_basis))
+        click.echo(
+            _human_route_summary(
+                source_lang=cfg.defaults.source_lang,
+                target_lang=cfg.defaults.target_lang,
+                backend_name=_tts_backend_for_source(cfg.defaults.source_lang),
+                translate_mode=cfg.translation.mode,
+                translation_provider=cfg.translation.provider,
+                project_dir=pdir,
+                route_basis=route_basis,
+            )
+        )
         _bootstrap_state(pdir, cfg)
         _refresh_runtime_input_state(pdir, cfg)
         run_pipeline(pdir, cfg, yes=yes)
