@@ -1426,6 +1426,14 @@ def _remediation_hint(
                 "missing from the dedicated OmniVoice interpreter"
             )
         if backend_name == "voxcpme":
+            server_runtime_mods = {"gradio", "torch", "funasr", "voxcpm"}
+            if mod in server_runtime_mods:
+                return (
+                    "fix: re-run `uv run dub bootstrap-voxcpm`, then start the server with "
+                    "``/path/to/voxcpme_python -m dub.tts_engines.voxcpme.server --port 8808`` "
+                    "(the configured paths.voxcpme_python must import "
+                    f"{mod} before `dub ja2zh` can work)"
+                )
             return (
                 f"fix: re-run `uv run dub bootstrap-voxcpm`; the {mod} dependency is "
                 "missing from the dedicated VoxCPM interpreter"
@@ -1434,9 +1442,10 @@ def _remediation_hint(
     if check_name == "service":
         if backend_name == "voxcpme":
             return (
-                "fix: start the local VoxCPM server with "
-                "`uv run python -m dub.tts_engines.voxcpme.server --port 8808` "
-                "(see docs/operator-runbook.md FR-10)"
+                "fix: start the local VoxCPM server with the configured "
+                "`paths.voxcpme_python -m dub.tts_engines.voxcpme.server --port 8808` "
+                "(if that interpreter is missing deps, re-run `uv run dub bootstrap-voxcpm` first; "
+                "see docs/operator-runbook.md FR-10)"
             )
         return f"fix: start the {backend_name or '<backend>'} backend service, then re-run `dub doctor`"
     if check_name == "config":
@@ -1476,7 +1485,7 @@ def _bootstrap_backend_venv(*, backend_name: str, extra_name: str, path_key: str
 
     runtime_import_probes = {
         "omnivoice": ["torch", "omnivoice", "opencc"],
-        "voxcpm": ["gradio_client"],
+        "voxcpm": ["gradio_client", "opencc", "gradio", "torch", "funasr", "voxcpm"],
     }
     imports_to_probe = runtime_import_probes.get(backend_name, [])
     if imports_to_probe:
@@ -1560,5 +1569,9 @@ def bootstrap_voxcpm(venv_path, config_path):
     )
     click.echo(f"bootstrap-voxcpm: installed video-dub-cli[tts-vox] into {venv_path}")
     click.echo(f"bootstrap-voxcpm: wrote paths.voxcpme_python={py} into {config_path}")
-    click.echo("bootstrap-voxcpm: note the local server must still be started separately; use this repo's `src/dub/tts_engines/voxcpme/server.py --port 8808`")
+    click.echo(
+        "bootstrap-voxcpm: note the local server must still be started separately with the configured interpreter; "
+        f"launch it with `{py} -m dub.tts_engines.voxcpme.server --port 8808` "
+        f"(configured in {config_path})"
+    )
     click.echo(f"bootstrap-voxcpm: next run `uv run dub doctor --config {config_path}`")

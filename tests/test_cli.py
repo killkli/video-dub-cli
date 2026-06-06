@@ -412,7 +412,19 @@ def test_dub_bootstrap_voxcpm_updates_config(runner, monkeypatch, tmp_path):
     assert data["paths"]["voxcpme_python"] == str((venv_dir / "bin" / "python").resolve())
     assert any(cmd[0][1] == "venv" for cmd in calls)
     assert any(cmd[0][1:4] == ["pip", "install", "--python"] for cmd in calls)
+    assert any(
+        cmd[0][0].endswith("python")
+        and cmd[0][1] == "-c"
+        and "import gradio_client" in cmd[0][2]
+        and "import opencc" in cmd[0][2]
+        and "import gradio" in cmd[0][2]
+        and "import torch" in cmd[0][2]
+        and "import funasr" in cmd[0][2]
+        and "import voxcpm" in cmd[0][2]
+        for cmd in calls
+    )
     assert "wrote paths.voxcpme_python" in result.output
+    assert "dub.tts_engines.voxcpme.server --port 8808" in result.output
 
 
 def test_dub_doctor_reports_missing_prereqs(runner, tmp_path, monkeypatch):
@@ -1742,6 +1754,7 @@ def test_dub_doctor_fails_when_vox_service_is_only_warn(runner, monkeypatch):
     assert "ready=`dub en2zh`" in result.output
     assert "blocked=`dub ja2zh`" in result.output
     assert "service: warn" in result.output
+    assert "paths.voxcpme_python -m dub.tts_engines.voxcpme.server --port 8808" in result.output
     assert "ready for `dub auto`, `dub en2zh`, `dub ja2zh`" not in result.output
 
 

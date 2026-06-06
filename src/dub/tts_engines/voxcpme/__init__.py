@@ -6,21 +6,16 @@ Stage 5 shells to the repo-owned package runner at
 argv unchanged to the vendored heavy-lift script
 ``vendor/pipeline_scripts/dubbing_batch_tts_vox.py``.
 
-VoxCPM is the Japanese route (ja). Unlike OmniVoice, it has three
-distinct readiness gates:
+VoxCPM is the Japanese route (ja). The route now has two runtime layers
+that must agree:
 
-1. wrapper — the package runner exists in the engines dir
-2. python deps — ``gradio_client`` (and ``opencc`` for t2s) must be
-   importable. These come from the dub venv (not OmniVoice's venv),
-   so we probe under ``sys.executable``.
-3. service reachability — VoxCPM runs as a local gradio server
-   (default 127.0.0.1:8808). If the server is down, the script
-   cannot connect and the run will fail at the first cue.
+1. the TTS client path used by stage 05 (``gradio_client`` + ``opencc``)
+2. the local VoxCPM server runtime (``gradio`` + ``torch`` + ``funasr`` +
+   ``voxcpm``), which operators launch separately on ``127.0.0.1:8808``
 
-The interpreter question is *not* a gate for VoxCPM: the gradio_client
-and opencc packages are pip-installable into the dub venv itself
-(via the ``[tts-vox]`` extra). So unlike OmniVoice, VoxCPM has no
-"second Python interpreter" requirement.
+Because the server is started with the configured ``paths.voxcpme_python``
+interpreter, ``dub doctor`` must probe that interpreter directly so its
+readiness output matches the actual bootstrap + launch workflow.
 """
 from __future__ import annotations
 
@@ -96,13 +91,17 @@ def build_route(config: DubConfig, source_lang: str = "ja") -> ResolvedRoute:
 
 def readiness(config: DubConfig, *, service_host: str = "127.0.0.1",
               service_port: int = 8808) -> TtsReadiness:
-    """Probe VoxCPM readiness. Five gates:
+    """Probe VoxCPM readiness. Nine gates:
 
     1. wrapper — the package runner exists in the engines dir
     2. interpreter — the configured VoxCPM interpreter exists
-    3. deps:gradio_client — gradio_client is importable there
-    4. deps:opencc — opencc is importable there
-    5. service — the local gradio server is reachable
+    3. deps:gradio_client — stage-05 client dependency is importable there
+    4. deps:opencc — stage-05 text normalization dependency is importable there
+    5. deps:gradio — server entrypoint dependency is importable there
+    6. deps:torch — server/model runtime dependency is importable there
+    7. deps:funasr — server ASR dependency is importable there
+    8. deps:voxcpm — vendored/local VoxCPM package is importable there
+    9. service — the local gradio server is reachable
     """
     checks: list[tuple[str, str, str]] = []
 
@@ -133,10 +132,15 @@ def readiness(config: DubConfig, *, service_host: str = "127.0.0.1",
     checks.append(("interpreter", "ok" if interp.exists() else "missing", str(interp)))
 
     # VoxCPM may now live in a dedicated interpreter. Probe the import
-    # gates under that interpreter explicitly so `dub doctor` reflects the
-    # runtime that stage 5 will actually call.
+    # gates under that interpreter explicitly so `dub doctor` reflects both
+    # the stage-05 client runtime and the separate local server runtime the
+    # operator will actually launch.
     checks.append(("deps:gradio_client", *diag.python_imports("gradio_client", interpreter=interp)))
     checks.append(("deps:opencc", *diag.python_imports("opencc", interpreter=interp)))
+    checks.append(("deps:gradio", *diag.python_imports("gradio", interpreter=interp)))
+    checks.append(("deps:torch", *diag.python_imports("torch", interpreter=interp)))
+    checks.append(("deps:funasr", *diag.python_imports("funasr", interpreter=interp)))
+    checks.append(("deps:voxcpm", *diag.python_imports("voxcpm", interpreter=interp)))
 
     # Service reachability is reported but does NOT block readiness by
     # default — operators may want to start VoxCPM after seeing the
