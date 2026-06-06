@@ -29,9 +29,16 @@ VoxCPM server 需先啟動（`cd ~/Dev/VoxCPM && .venv/bin/python app.py --port 
 
 執行環境：必須在 `~/.hermes/hermes-agent/venv` 內（gradio_client + opencc 都在那）。
 """
+from __future__ import annotations
 import os, sys, json, time, argparse, shutil, subprocess
 from pathlib import Path
-from gradio_client import Client
+
+# ``gradio_client`` is intentionally NOT imported at module level.
+# ``--help`` and the ``dub doctor`` runtime probe must succeed on a
+# stock venv that does not have gradio_client installed. The
+# dependency is pulled in lazily inside :func:`main` and threaded
+# into :func:`generate_one` as a parameter, so the import boundary
+# is the same place the heavy model stack lives.
 
 
 def dur(p: str) -> float:
@@ -151,6 +158,24 @@ def main():
     print(f"Processing {len(indices)} segments (line {indices[0]}-{indices[-1]})")
     print(f"Server: {args.url}  CFG={args.cfg} Steps={args.steps} opencc={bool(t2s)}")
     print()
+
+    # Heavy runtime import boundary. ``gradio_client`` is the one
+    # third-party dep this script needs to talk to the local VoxCPM
+    # gradio server. Pulled in here — after argparse has already
+    # succeeded — so ``--help`` works on a stock venv. The contract:
+    # a missing dep here fails with a guided error, not a traceback
+    # at module import.
+    try:
+        from gradio_client import Client
+    except ImportError as e:
+        raise SystemExit(
+            f"gradio_client is not installed in this Python "
+            f"environment: {e!r}. Install it with "
+            f"`uv pip install gradio_client` (the [tts-vox] extra "
+            f"pulls it in transitively). The script's `--help` works "
+            f"without it; only actual synthesis execution needs the "
+            f"gradio client."
+        ) from e
 
     print(f"Connecting to VoxCPM at {args.url}...")
     client = Client(args.url)
