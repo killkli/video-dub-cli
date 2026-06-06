@@ -22,6 +22,7 @@ Assumes project structure:
             video.instrumental.wav   # drums+bass+other mix
 """
 import argparse
+import os
 import subprocess
 import sys
 import shutil
@@ -31,13 +32,14 @@ from pathlib import Path
 # This repo vendored the vocal-remover CLI under src/vocal_remover/ (PEP 420
 # namespace package). We invoke it as a module so the dedicated stems venv's
 # demucs-mlx is available: `python -m vocal_remover`.
-_REPO_ROOT = Path(__file__).resolve().parents[3]  # vendor/pipeline_scripts/ -> repo root
-_VOCAL_REMOVER_MODULE = _REPO_ROOT / "src" / "vocal_remover"
+_REPO_ROOT = Path(__file__).resolve().parents[2]  # vendor/pipeline_scripts/ -> repo root
+_SRC_DIR = _REPO_ROOT / "src"
+_VOCAL_REMOVER_MODULE = _SRC_DIR / "vocal_remover"
 
 
-def run_cmd(cmd, check=True):
+def run_cmd(cmd, check=True, env=None):
     print(f"  $ {' '.join(str(c) for c in cmd)}")
-    r = subprocess.run(cmd, capture_output=True, text=True)
+    r = subprocess.run(cmd, capture_output=True, text=True, env=env)
     if r.stdout:
         for line in r.stdout.splitlines()[:12]:
             print(f"    {line}")
@@ -148,10 +150,17 @@ def main():
     if args.model:
         cmd += ["--model", args.model]
 
+    stems_env = os.environ.copy()
+    existing_pythonpath = stems_env.get("PYTHONPATH")
+    stems_env["PYTHONPATH"] = (
+        f"{_SRC_DIR}{os.pathsep}{existing_pythonpath}"
+        if existing_pythonpath else str(_SRC_DIR)
+    )
+
     print(f"\n[2] Run demucs stem separation ...")
     print(f"  stems: {args.stems}")
     print(f"  model: {args.model or 'htdemucs (default)'}")
-    run_cmd(cmd)
+    run_cmd(cmd, env=stems_env)
 
     # Rename demucs output to standard naming: <video>.<stem>.wav
     video_stem = temp_video_copy.stem  # "video" from "video.mp4"
