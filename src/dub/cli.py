@@ -20,6 +20,7 @@ from dub.state import load_state, new_state, save_state
 from dub.tts_engines import builtin_backends
 from dub.tts_engines.omnivoice import readiness as omnivoice_readiness
 from dub.tts_engines.voxcpme import readiness as voxcpme_readiness
+from dub.tts_engines.stems import readiness as _stems_readiness
 
 
 def _prepare_project(video: Path, project_dir: str | None, cfg) -> Path:
@@ -1286,6 +1287,27 @@ def doctor(config_path):
         "omnivoice": omnivoice_readiness(cfg),
         "voxcpme": voxcpme_readiness(cfg),
     }
+
+    # Probe stems backend independently — it is a preprocessing stage, not a TTS route
+    stems_result = _stems_readiness(cfg)
+    click.echo("stems:")
+    stems_ok = stems_result.ready
+    for gate, gate_status, detail in stems_result.checks:
+        status = "OK" if gate_status == "ok" else gate_status.upper()
+        click.echo(f"  {gate}: {status} ({detail})")
+        if gate_status != "ok":
+            all_ok = False
+            hint = _remediation_hint(
+                check_name=gate,
+                check_status=gate_status,
+                backend_name="stems",
+                blocked_route=None,
+            )
+            if hint:
+                remediation_lines.append(hint)
+    if not stems_ok:
+        all_ok = False
+
     click.echo("tts_backends:")
     ready_routes: list[str] = []
     blocked_routes: list[str] = []
@@ -1361,6 +1383,7 @@ def bootstrap():
     click.echo("bootstrap: copy `.env.example` to your shell env setup and export GOOGLE_API_KEY (or GEMINI_API_KEY) before Gemini translation")
     click.echo("bootstrap: if you use zsh and your keys live in ~/.zshrc, you may need to source it before `uv run` because Hermes / CI shells do not load interactive rc files")
     click.echo("bootstrap: repo-owned pipeline scripts live under vendor/pipeline_scripts; no extra path config is required")
+    click.echo("bootstrap: stem separation (vocal-remover) uses the vendored src/vocal_remover/ CLI; run `uv sync --extra stems` or `uv run dub bootstrap-stems`")
     click.echo("bootstrap: real backend also needs google-genai for Gemini translation — it is pulled in by `uv sync --extra all`")
     click.echo("bootstrap: OmniVoice route uses the configured Python interpreter (default: python3) with required packages installed")
     click.echo("bootstrap: OmniVoice model code is vendored in this repo; install its runtime deps in the configured OmniVoice interpreter with `uv sync --extra tts-omnivoice`")
@@ -1417,6 +1440,8 @@ def _remediation_hint(
             return "fix: run `uv run dub bootstrap-omnivoice` to create the dedicated interpreter and wire paths.omnivoice_python"
         if backend_name == "voxcpme":
             return "fix: run `uv run dub bootstrap-voxcpm` to create the dedicated interpreter and wire paths.voxcpme_python"
+        if backend_name == "stems":
+            return "fix: run `uv run dub bootstrap-stems` to create the dedicated interpreter and wire paths.stems_python"
         return "fix: run the matching `uv run dub bootstrap-<backend>` to create the dedicated interpreter"
     if check_name.startswith("deps:"):
         mod = check_name.split(":", 1)[1]
@@ -1437,6 +1462,11 @@ def _remediation_hint(
             return (
                 f"fix: re-run `uv run dub bootstrap-voxcpm`; the {mod} dependency is "
                 "missing from the dedicated VoxCPM interpreter"
+            )
+        if backend_name == "stems":
+            return (
+                f"fix: re-run `uv run dub bootstrap-stems`; the {mod} dependency is "
+                "missing from the dedicated stems interpreter"
             )
         return f"fix: re-run `dub bootstrap-{backend_name or '<backend>'}`; the {mod} dependency is missing"
     if check_name == "service":
@@ -1540,6 +1570,41 @@ def bootstrap_omnivoice(venv_path, config_path):
     click.echo(f"bootstrap-omnivoice: installed video-dub-cli[tts-omnivoice] into {venv_path}")
     click.echo(f"bootstrap-omnivoice: wrote paths.omnivoice_python={py} into {config_path}")
     click.echo(f"bootstrap-omnivoice: next run `uv run dub doctor --config {config_path}`")
+
+
+@main.command(name="bootstrap-stems")
+@click.option(
+    "--venv-path",
+    type=click.Path(path_type=Path),
+    default=Path(".venvs") / "stems",
+    show_default=True,
+    help="Target virtualenv directory for the dedicated stems interpreter.",
+)
+@click.option(
+    "--config",
+    "config_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="YAML config file to update with paths.stems_python (default: ~/.config/dub/config.yaml).",
+)
+def bootstrap_stems(venv_path, config_path):
+    """Create/update a dedicated stems venv (demucs-mlx) and wire config automatically.
+
+    This bootstraps the vocal-remover CLI (vendored under src/vocal_remover/)
+    with the demucs-mlx inference stack in a dedicated venv. Run this once
+    on a fresh clone; ``dub doctor`` will tell you when it is needed.
+    """
+    config_path = (config_path or _default_operator_config_path()).expanduser().resolve()
+    py = _bootstrap_backend_venv(
+        backend_name="stems",
+        extra_name="stems",
+        path_key="stems_python",
+        venv_path=venv_path,
+        config_path=config_path,
+    )
+    click.echo(f"bootstrap-stems: installed video-dub-cli[stems] into {venv_path}")
+    click.echo(f"bootstrap-stems: wrote paths.stems_python={py} into {config_path}")
+    click.echo(f"bootstrap-stems: next run `uv run dub doctor --config {config_path}`")
 
 
 @main.command(name="bootstrap-voxcpm")

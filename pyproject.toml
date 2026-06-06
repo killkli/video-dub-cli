@@ -110,6 +110,14 @@ tts-vox = [
     "gradio_client>=0.16.0",
 ]
 
+# Stem separation (demucs-mlx). The vocal-remover CLI is vendored under
+# src/vocal_remover; this extra pulls in the heavy demucs-mlx inference
+# stack for Apple Silicon MLX acceleration.
+stems = [
+    "demucs-mlx[convert]>=1.4.3",
+    "tqdm>=4.66.0",
+]
+
 # ASR / audio stack (qwen-asr MLX). Pulls in numpy / torch-free paths.
 # torchcodec is the audio I/O shim required by torchaudio >= 2.9.
 asr = [
@@ -179,7 +187,7 @@ conflicts = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["dub*", "qwenasr_mlx_cli*", "omnivoice*", "voxcpm*"]
+include = ["dub*", "qwenasr_mlx_cli*", "omnivoice*", "voxcpm*", "vocal_remover*"]
 
 [tool.setuptools.package-data]
 dub = ["py.typed"]

@@ -27,7 +27,12 @@ import sys
 import shutil
 from pathlib import Path
 
-VOCAL_REMOVER_CLI = Path("/Users/johnchen/.hermes/projects/vocal-remover/.venv/bin/vocal-remover")
+# Resolve the repo-owned vocal_remover module relative to this script's location.
+# This repo vendored the vocal-remover CLI under src/vocal_remover/ (PEP 420
+# namespace package). We invoke it as a module so the dedicated stems venv's
+# demucs-mlx is available: `python -m vocal_remover`.
+_REPO_ROOT = Path(__file__).resolve().parents[3]  # vendor/pipeline_scripts/ -> repo root
+_VOCAL_REMOVER_MODULE = _REPO_ROOT / "src" / "vocal_remover"
 
 
 def run_cmd(cmd, check=True):
@@ -124,15 +129,18 @@ def main():
     print(f"\n[1] Copy video to stems dir ...")
     shutil.copy2(video_path, temp_video_copy)
 
-    if not VOCAL_REMOVER_CLI.exists():
-        print(f"ERROR: vocal-remover CLI not found: {VOCAL_REMOVER_CLI}")
-        print("Install: pip install ~/.hermes/projects/vocal-remover/")
+    # Build the vocal-remover invocation: run via `python -m vocal_remover` so the
+    # dedicated stems venv's demucs-mlx is picked up. The python interpreter is
+    # whatever `stems_python` resolved to (set by `dub bootstrap-stems` or the
+    # dub venv fallback). The module lives under src/vocal_remover/ in the repo.
+    stems_python = Path(sys.executable)
+    if not _VOCAL_REMOVER_MODULE.exists():
+        print(f"ERROR: vocal_remover module not found: {_VOCAL_REMOVER_MODULE}")
+        print("This usually means the repo was not fully installed.")
         sys.exit(1)
 
-    # vocal-remover CLI: takes --stems (comma-separated or 'all') as positional args
-    # Output goes next to the input file (or to --output dir)
     cmd = [
-        str(VOCAL_REMOVER_CLI),
+        str(stems_python), "-m", "vocal_remover",
         "--stems", args.stems,
         "--output", str(stems_dir),
         str(temp_video_copy),

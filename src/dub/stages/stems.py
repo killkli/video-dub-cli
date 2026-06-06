@@ -33,7 +33,7 @@ class StemsStage(Stage):
         video_mp4 = project_dir / "01_raw_video" / "video.mp4"
 
         cmd = [
-            "python3", str(script),
+            str(config.paths.stems_python), str(script),
             str(project_dir),
             "video.mp4",
         ]
