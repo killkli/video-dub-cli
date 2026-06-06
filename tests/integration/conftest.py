@@ -200,6 +200,59 @@ def fake_qwenasr_config(tmp_path: Path) -> Path:
     )
     fake_tts_vox.chmod(0o755)
 
+    # Fake dubbing_stems.py — stand-in for the real Demucs stem separator.
+    # The real script invokes vocal-remover (MLX) on the source video; the
+    # integration suite can't run that, so we write a stub vocals.wav and
+    # an instrumental bed into <project>/02_stems/. The StemsStage's
+    # is_done() requires:
+    #   02_stems/<video>.vocals.wav exists AND mtime > source video mtime
+    # so we explicitly bump the atime/mtime of the stub past the source.
+    # The fake also writes video.mp4.instrumental.wav because the
+    # AssembleStage reads it (and copies it from instrumental.wav as a
+    # compatibility shim) — the real remix never consumes it because the
+    # fake remix just copies the source video, but producing both keeps
+    # the post-pipeline artifact set consistent with real runs.
+    fake_stems = skills_dir / "dubbing_stems.py"
+    fake_stems.write_text(
+        "#!/usr/bin/env python3\n"
+        "\"\"\"Fake Demucs stem separation: write a stub vocals.wav (and\n"
+        "instrumental bed) into <project>/02_stems/ that satisfies the\n"
+        "StemsStage.is_done() mtime gate.\"\"\"\n"
+        "import argparse, os, sys\n"
+        "from pathlib import Path\n"
+        "\n"
+        "p = argparse.ArgumentParser()\n"
+        "p.add_argument('project_dir')\n"
+        "p.add_argument('video_filename', nargs='?', default='video.mp4')\n"
+        "p.add_argument('--stems', default='all')\n"
+        "p.add_argument('--model', default=None)\n"
+        "args = p.parse_args()\n"
+        "\n"
+        "project = Path(args.project_dir).resolve()\n"
+        "video = project / '01_raw_video' / args.video_filename\n"
+        "stems_dir = project / '02_stems'\n"
+        "stems_dir.mkdir(parents=True, exist_ok=True)\n"
+        "\n"
+        "if not video.exists():\n"
+        "    sys.stderr.write(f'fake-stems: source missing: {video}\\n')\n"
+        "    sys.exit(2)\n"
+        "\n"
+        "vocals = stems_dir / f'{args.video_filename}.vocals.wav'\n"
+        "instrumental = stems_dir / f'{args.video_filename}.instrumental.wav'\n"
+        "# 2048 bytes is well past the 1000-byte gate the real Demucs would\n"
+        # produce, and large enough for any downstream stage that probes size.\n"
+        "vocals.write_bytes(b'\\x00' * 2048)\n"
+        "instrumental.write_bytes(b'\\x00' * 2048)\n"
+        "\n"
+        "# Bump mtime past the source video so StemsStage.is_done() returns\n"
+        "# True on the next run (resume / idempotency tests rely on this).\n"
+        "src_mtime = video.stat().st_mtime\n"
+        "for stub in (vocals, instrumental):\n"
+        "    os.utime(stub, (src_mtime + 1, src_mtime + 1))\n",
+        encoding="utf-8",
+    )
+    fake_stems.chmod(0o755)
+
     cfg = tmp_path / "integration-config.yaml"
     cfg.write_text(
         f"""
