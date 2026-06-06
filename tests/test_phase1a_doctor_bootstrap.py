@@ -19,10 +19,14 @@ the pre-existing one-shot / route / run / validate coverage in
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 import pytest
 from click.testing import CliRunner
 
 from dub.cli import main
+from dub.config import DubConfig, PathsConfig
 from dub.tts_engines.contract import TtsReadiness
 
 
@@ -41,7 +45,11 @@ def _patch_all_checks_ok(monkeypatch, import_ok: bool = True) -> None:
     monkeypatch.setattr("dub.cli._env_status", lambda *_names: (True, "GOOGLE_API_KEY"))
     monkeypatch.setattr(
         "dub.tts_engines.diagnostics.python_imports",
-        lambda _name: ("ok", "/fake/import/path.py") if import_ok else ("missing", "ModuleNotFoundError: nope"),
+        lambda _name, interpreter=None: ("ok", "/fake/import/path.py") if import_ok else ("missing", "ModuleNotFoundError: nope"),
+    )
+    monkeypatch.setattr(
+        "dub.cli.load_config",
+        lambda _config_path=None: DubConfig(paths=PathsConfig(stems_python=Path(sys.executable))),
     )
 
     ready = TtsReadiness(backend="fake", ready=True, detail="fake-ready", checks=[])
@@ -77,7 +85,7 @@ def test_dub_doctor_prints_remediation_lines_when_top_level_gate_missing(runner,
     monkeypatch.setattr("dub.cli._env_status", lambda *_names: (False, "GOOGLE_API_KEY"))
     monkeypatch.setattr(
         "dub.tts_engines.diagnostics.python_imports",
-        lambda _name: ("ok", "/fake/import/path.py"),
+        lambda _name, interpreter=None: ("ok", "/fake/import/path.py"),
     )
 
     ready = TtsReadiness(backend="fake", ready=True, detail="fake-ready", checks=[])
@@ -109,7 +117,7 @@ def test_dub_doctor_prints_remediation_lines_when_backend_gate_blocked(runner, m
     monkeypatch.setattr("dub.cli._env_status", lambda *_names: (True, "GOOGLE_API_KEY"))
     monkeypatch.setattr(
         "dub.tts_engines.diagnostics.python_imports",
-        lambda _name: ("ok", "/fake/import/path.py"),
+        lambda _name, interpreter=None: ("ok", "/fake/import/path.py"),
     )
 
     # omnivoice ready, voxcpme blocked with a service gate failure.
@@ -150,9 +158,11 @@ def test_dub_bootstrap_ends_with_explicit_next_step(runner):
     assert "bootstrap next:" in result.output
     assert "dub doctor" in result.output
     assert "dub auto" in result.output
-    # And a first-run canonical three-step sequence.
+    # And a first-run canonical sequence that includes stems bootstrap.
     assert "bootstrap first-run:" in result.output
     assert "uv sync --extra all" in result.output
+    assert "uv sync --extra stems" not in result.output
+    assert "dub bootstrap-stems" in result.output
 
 
 def test_dub_doctor_prints_no_remediation_lines_when_all_gates_ok(runner, monkeypatch):

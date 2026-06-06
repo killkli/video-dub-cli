@@ -1383,7 +1383,7 @@ def bootstrap():
     click.echo("bootstrap: copy `.env.example` to your shell env setup and export GOOGLE_API_KEY (or GEMINI_API_KEY) before Gemini translation")
     click.echo("bootstrap: if you use zsh and your keys live in ~/.zshrc, you may need to source it before `uv run` because Hermes / CI shells do not load interactive rc files")
     click.echo("bootstrap: repo-owned pipeline scripts live under vendor/pipeline_scripts; no extra path config is required")
-    click.echo("bootstrap: stem separation (vocal-remover) uses the vendored src/vocal_remover/ CLI; run `uv sync --extra stems` or `uv run dub bootstrap-stems`")
+    click.echo("bootstrap: stem separation (vocal-remover) uses the vendored src/vocal_remover/ CLI; on a fresh clone run `uv run dub bootstrap-stems` so paths.stems_python is wired before real stems runs")
     click.echo("bootstrap: real backend also needs google-genai for Gemini translation — it is pulled in by `uv sync --extra all`")
     click.echo("bootstrap: OmniVoice route uses the configured Python interpreter (default: python3) with required packages installed")
     click.echo("bootstrap: OmniVoice model code is vendored in this repo; install its runtime deps in the configured OmniVoice interpreter with `uv sync --extra tts-omnivoice`")
@@ -1397,7 +1397,7 @@ def bootstrap():
     # are the operator-facing summary: a one-glance "what to do next"
     # and the canonical smoke command. P1A lane B.
     click.echo("bootstrap next: run `uv run dub doctor` to confirm every gate; once it prints `doctor ok: ready for dub auto...`, the canonical smoke is `uv run dub auto <VIDEO>`")
-    click.echo("bootstrap first-run: `uv sync --extra all` -> `uv run dub doctor` -> `uv run dub auto <VIDEO>`")
+    click.echo("bootstrap first-run: `uv sync --extra all` -> `uv run dub bootstrap-stems` -> `uv run dub doctor` -> `uv run dub auto <VIDEO>`")
 
 
 def _remediation_hint(
