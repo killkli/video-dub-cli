@@ -19,30 +19,32 @@ OmniVoice checkout or `DUB_OMNIVOICE_ROOT` env var is required.
 import argparse, os, sys, time
 from pathlib import Path
 
-# ── 載入 OmniVoice（須在已安裝 video-dub-cli 的 venv 內）────────────────────
-# Heavy model stack — imported only when the script actually runs,
-# not when the wrapper module is imported by `dub doctor`.
-from opencc import OpenCC  # noqa: E402
-import torch  # noqa: E402
-import torchaudio  # noqa: E402
-from omnivoice.models.omnivoice import OmniVoice  # noqa: E402
-
-OPENCC = OpenCC('t2s')
+# Heavy model stack (opencc, torch, torchaudio, omnivoice) is intentionally
+# NOT imported at module level. ``--help`` and the ``dub doctor`` runtime
+# probe must succeed on a stock venv that does not have these heavy deps
+# installed. The imports happen inside :func:`main` so the operator-facing
+# argparse / readiness paths fail with a guided error only when actual
+# synthesis execution is attempted.
 
 # ── Atomic write + size gate (dub-cli's tts.py mirrors _TTS_MIN_BYTES = 1000) ──
 _TTS_MIN_BYTES = 1000
 
 
-def _atomic_write_wav(tmp_path: Path, final_path: Path, wav_tensor, sample_rate: int) -> bool:
+def _atomic_write_wav(tmp_path: Path, final_path: Path, wav_tensor, sample_rate: int,
+                      torchaudio_mod) -> bool:
     """Write the wav to ``tmp_path`` first, fsync, then ``os.replace`` onto
     ``final_path``. ``os.replace`` is atomic on the same filesystem, so a
     concurrent reader either sees the old file or the new one — never a
     half-written intermediate.
 
     Returns True iff the final file exists and is > _TTS_MIN_BYTES afterwards.
+
+    ``torchaudio_mod`` is passed in (rather than imported at module level) so
+    the script can be loaded — and ``--help`` can run — on a stock venv
+    that does not have torchaudio installed.
     """
     try:
-        torchaudio.save(str(tmp_path), wav_tensor.cpu(), sample_rate)
+        torchaudio_mod.save(str(tmp_path), wav_tensor.cpu(), sample_rate)
         # Make sure bytes hit the platter before the rename publishes them.
         try:
             with open(tmp_path, "rb") as _fh:
@@ -97,15 +99,20 @@ def parse_srt(path: str) -> list[dict]:
             continue
     return captions
 
-def preprocess(text: str) -> str:
-    """OpenCC t2s 繁→簡（OmniVoice 必用）"""
-    return OPENCC.convert(text)
+def preprocess(text: str, t2s) -> str:
+    """OpenCC t2s 繁→簡（OmniVoice 必用）
+
+    ``t2s`` is the OpenCC t2s converter, loaded once in :func:`main` and
+    passed in here. Loading it at module level would prevent ``--help``
+    from working on a stock venv that does not have opencc installed.
+    """
+    return t2s.convert(text)
 
 def pf(msg, end='\n'):
     print(msg, flush=True, end=end)
 
 # ── TTS ──────────────────────────────────────────────────────────────────────
-def tts_segment(model, zh_text: str, orig_text: str,
+def tts_segment(model, t2s, torchaudio_mod, zh_text: str, orig_text: str,
                 ref_audio_path: Path, duration: float, out_wav: Path) -> bool:
     """
     用 duration= 控制語速（優先於 speed=）。
@@ -114,6 +121,11 @@ def tts_segment(model, zh_text: str, orig_text: str,
     Atomic write contract: we never leave a partial wav at ``out_wav`` — either
     the file is fully present (> _TTS_MIN_BYTES) or it is absent. This is the
     single property the dub-cli stage verifier depends on for resumability.
+
+    ``t2s`` and ``torchaudio_mod`` are passed in (rather than imported here)
+    so the heavy OmniVoice / torchaudio stack only gets pulled in from
+    :func:`main` — ``--help`` and any other operator-facing read-only path
+    can run on a stock venv without these deps installed.
     """
     ref_audio_path = Path(ref_audio_path)
     if not ref_audio_path.exists():
@@ -121,8 +133,8 @@ def tts_segment(model, zh_text: str, orig_text: str,
         return False
 
     try:
-        zh_simp = preprocess(zh_text)
-        orig_simp = preprocess(orig_text)
+        zh_simp = preprocess(zh_text, t2s)
+        orig_simp = preprocess(orig_text, t2s)
 
         wav = model.generate(
             text=zh_simp,
@@ -147,12 +159,45 @@ def tts_segment(model, zh_text: str, orig_text: str,
                 tmp_wav.unlink()
         except OSError:
             pass
-        return _atomic_write_wav(tmp_wav, out_wav, wav_tensor, 24000)
+        return _atomic_write_wav(tmp_wav, out_wav, wav_tensor, 24000, torchaudio_mod)
     except Exception as e:
         pf(f'  FAIL: {e}')
         return False
 
 # ── main ──────────────────────────────────────────────────────────────────────
+def _load_omnivoice_runtime():
+    """Import the OmniVoice heavy stack + OpenCC converter on demand.
+
+    Kept out of module level so that ``--help`` and the ``dub doctor``
+    runtime probe can run on a stock venv that does not have these
+    heavy dependencies installed. The actual synthesis path (this
+    function's caller) is the one place the operator pays the import
+    cost — and if the deps are missing, they get a clear guidance
+    error rather than an opaque traceback from somewhere inside
+    argparse.
+    """
+    try:
+        from opencc import OpenCC
+        import torch
+        import torchaudio
+        from omnivoice.models.omnivoice import OmniVoice
+    except ImportError as e:
+        raise SystemExit(
+            f"OmniVoice heavy dependencies are not installed in this "
+            f"Python environment: {e!r}. Install them with "
+            f"`uv pip install -e .[tts-omnivoice]` (or the umbrella "
+            f"`[all]` extra) and retry. The script's `--help` works "
+            f"without them; only actual synthesis execution needs "
+            f"the heavy stack."
+        ) from e
+    return {
+        "t2s": OpenCC('t2s'),
+        "torch": torch,
+        "torchaudio": torchaudio,
+        "OmniVoice": OmniVoice,
+    }
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--zh-srt',  required=True, help='中文翻譯 SRT 路徑')
@@ -168,6 +213,16 @@ def main():
     ap.add_argument('--no-skip-existing', dest='skip_existing', action='store_false',
                     help='強制重跑所有 line（不論檔案是否已存在）')
     args = ap.parse_args()
+
+    # Heavy runtime import boundary. Pulled in here — after argparse
+    # has already succeeded — so ``--help`` works on a stock venv.
+    # The contract: a missing dep here fails with a guided error, not
+    # a traceback at module import.
+    runtime = _load_omnivoice_runtime()
+    t2s = runtime["t2s"]
+    torch = runtime["torch"]
+    torchaudio_mod = runtime["torchaudio"]
+    OmniVoice = runtime["OmniVoice"]
 
     zh_srt = Path(args.zh_srt)
     en_srt = Path(args.en_srt)
@@ -213,7 +268,7 @@ def main():
 
         pf(f'[{seq_num}/{total}] [{idx}] dur={dur:.2f}s → {out_wav.name}', end=' ')
         t0 = time.time()
-        ok_flag = tts_segment(model, zh, orig, ref_audio_path, dur, out_wav)
+        ok_flag = tts_segment(model, t2s, torchaudio_mod, zh, orig, ref_audio_path, dur, out_wav)
         elapsed = time.time() - t0
 
         if ok_flag:
