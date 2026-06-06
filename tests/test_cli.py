@@ -1425,7 +1425,12 @@ def test_dub_doctor_success_message_names_auto_workflow_lane(runner, monkeypatch
     result = runner.invoke(main, ["doctor"])
     assert result.exit_code == 0, result.output
     assert "ready for `dub auto`, `dub en2zh`, `dub ja2zh`" in result.output
-    assert "run `dub auto <VIDEO>`" in result.output
+    # The doctor success pointer should use the canonical `uv run dub auto ...`
+    # invocation per README.md / QUICKSTART.md, but it must still mention
+    # `dub auto` as the canonical one-command entrypoint so a first-time
+    # operator can search the help output for the command name.
+    assert "dub auto <VIDEO>" in result.output
+    assert "uv run dub auto <VIDEO>" in result.output
 
 
 def test_dub_doctor_fails_when_any_route_backend_is_blocked(runner, monkeypatch):
@@ -2180,3 +2185,59 @@ def test_run_preflight_success_line_includes_route_summary_for_each_mode(
     assert "mode=use-existing" in preflight
     assert "external_srt=" in preflight
     assert str(external_srt) in preflight
+
+
+# ── Phase 1A Commit 2 — doctor/bootstrap follow-up tests ────────────────────
+#
+# The bulk of the Phase 1A Commit 2 contract is locked in by
+# ``tests/test_phase1a_doctor_bootstrap.py`` (a dedicated module the
+# prior implementation worker added so this commit's tests are easy to
+# find and audit). The two tests below are the only ones that do not
+# fit cleanly into that dedicated module:
+#
+# * ``test_dub_bootstrap_module_main_also_prints_next_step`` exercises
+#   the standalone ``dub-bootstrap`` console-script entrypoint declared
+#   in ``pyproject.toml [project.scripts]``. The dedicated module
+#   covers the ``dub bootstrap`` Click command; the console-script
+#   forwarding is a separate surface that the dedicated module does
+#   not touch.
+# * ``test_remediation_hint_returns_none_for_unknown_gate`` is a pure
+#   unit test on the helper, not an end-to-end CLI invocation.
+
+
+def test_dub_bootstrap_module_main_also_prints_next_step():
+    """`dub-bootstrap` console-script entrypoint must surface the new
+    next-step summary too — it forwards to the same Click command but
+    pinning the contract here guards against a future refactor that
+    accidentally bypasses the summary on the standalone entrypoint.
+    """
+    import io
+    from contextlib import redirect_stdout
+
+    from dub.bootstrap import main as bs_main
+
+    out = io.StringIO()
+    with redirect_stdout(out):
+        try:
+            bs_main()
+        except SystemExit as exc:
+            assert exc.code == 0
+    text = out.getvalue()
+    assert "bootstrap next:" in text
+    assert "bootstrap first-run:" in text
+
+
+def test_remediation_hint_returns_none_for_unknown_gate():
+    """The remediation helper must degrade gracefully — an unrecognised
+    gate key returns ``None`` so the caller can fall back to the generic
+    pointer instead of emitting a misleading hint.
+    """
+    from dub.cli import _remediation_hint
+
+    assert _remediation_hint(check_name="mystery_gate", check_status="missing") is None
+    assert _remediation_hint(check_name="ffmpeg", check_status="ok") is None
+    # And the canonical, well-known gates do return concrete hints.
+    assert _remediation_hint(check_name="ffmpeg", check_status="missing") is not None
+    assert _remediation_hint(check_name="gemini_api_key", check_status="missing") is not None
+    assert _remediation_hint(check_name="service", check_status="warn", backend_name="voxcpme") is not None
+

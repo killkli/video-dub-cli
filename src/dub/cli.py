@@ -1016,11 +1016,18 @@ def doctor(config_path):
     checks.append(("py:torchcodec", tcdc_status == "ok", tcdc_detail))
 
     all_ok = True
+    remediation_lines: list[str] = []
     for name, ok, detail in checks:
         status = "OK" if ok else "MISSING"
         click.echo(f"{name}: {status} ({detail})")
         if not ok:
             all_ok = False
+            hint = _remediation_hint(
+                check_name=name,
+                check_status="missing",
+            )
+            if hint:
+                remediation_lines.append(hint)
 
     if auto_recovered:
         click.echo(
@@ -1054,10 +1061,19 @@ def doctor(config_path):
                 all_ok = False
         for gate, gate_status, detail in readiness.checks:
             click.echo(f"    - {gate}: {gate_status} ({detail})")
+            if gate_status != "ok":
+                hint = _remediation_hint(
+                    check_name=gate,
+                    check_status=gate_status,
+                    backend_name=backend_name,
+                    blocked_route=route_name,
+                )
+                if hint:
+                    remediation_lines.append(hint)
 
     if all_ok:
         click.echo("doctor ok: ready for `dub auto`, `dub en2zh`, `dub ja2zh`")
-        click.echo("doctor next: run `dub auto <VIDEO>` (or `dub en2zh <VIDEO>` / `dub ja2zh <VIDEO>`) to dub end-to-end")
+        click.echo("doctor next: run `uv run dub auto <VIDEO>` (or `dub en2zh <VIDEO>` / `dub ja2zh <VIDEO>`) to dub end-to-end")
         return
 
     if ready_routes or blocked_routes:
@@ -1067,6 +1083,23 @@ def doctor(config_path):
         if blocked_routes:
             route_parts.append("blocked=" + ", ".join(f"`{route}`" for route in blocked_routes))
         click.echo("doctor lanes: " + " ; ".join(route_parts))
+
+    if remediation_lines:
+        # De-dup while preserving the order the doctor surfaces gates
+        # in (top-level MISSING first, then per-backend BLOCKED gates).
+        seen: set[str] = set()
+        unique_lines: list[str] = []
+        for line in remediation_lines:
+            if line in seen:
+                continue
+            seen.add(line)
+            unique_lines.append(line)
+        for line in unique_lines:
+            click.echo(f"doctor {line}")
+        click.echo(
+            "doctor next: re-run `uv run dub doctor` after the fix above lands; "
+            "full failure list is in the lanes summary above"
+        )
 
     raise click.ClickException("doctor found missing prerequisites")
 
@@ -1090,6 +1123,84 @@ def bootstrap():
     click.echo("bootstrap: VoxCPM requires a local server on 127.0.0.1:8808; the canonical entrypoint is this repo's `src/dub/tts_engines/voxcpme/server.py`")
     click.echo("bootstrap: the only required external secret is GOOGLE_API_KEY / GEMINI_API_KEY")
     click.echo("bootstrap: run `dub doctor` to verify every gate before your first real run")
+    # The lines above are the explanatory body. The two closing lines
+    # are the operator-facing summary: a one-glance "what to do next"
+    # and the canonical smoke command. P1A lane B.
+    click.echo("bootstrap next: run `uv run dub doctor` to confirm every gate; once it prints `doctor ok: ready for dub auto...`, the canonical smoke is `uv run dub auto <VIDEO>`")
+    click.echo("bootstrap first-run: `uv sync --extra all` -> `uv run dub doctor` -> `uv run dub auto <VIDEO>`")
+
+
+def _remediation_hint(
+    *,
+    check_name: str,
+    check_status: str,
+    backend_name: str | None = None,
+    blocked_route: str | None = None,
+) -> str | None:
+    """Return a concrete one-line fix command for a failing ``dub doctor`` gate.
+
+    The hint is what the operator can copy-paste to recover from a single
+    MISSING / BLOCKED gate. Returning ``None`` means "no specific hint
+    known for this gate" — the caller should fall back to the generic
+    ``run ``dub doctor`` for the full report`` pointer.
+
+    ``check_name`` is the gate key (e.g. ``ffmpeg``, ``gemini_api_key``,
+    ``interpreter``, ``deps:opencc``, ``service``); ``check_status`` is
+    the per-gate status string the readiness object returns (``"ok"``,
+    ``"warn"``, ``"missing"``, ``"blocked"``, etc.). ``backend_name`` /
+    ``blocked_route`` let the hint include the right backend-specific
+    bootstrap command.
+    """
+    if check_status == "ok":
+        return None
+    # Top-level (non-TTS) gates
+    if check_name == "ffmpeg" or check_name == "ffprobe":
+        return "fix: install ffmpeg/ffprobe (macOS: `brew install ffmpeg`; Debian/Ubuntu: `sudo apt-get install -y ffmpeg`)"
+    if check_name == "repo_pipeline_scripts":
+        return "fix: run `uv sync --extra all` from the repo root to repopulate vendor/pipeline_scripts"
+    if check_name == "gemini_api_key":
+        return (
+            "fix: export GOOGLE_API_KEY (or GEMINI_API_KEY) in your shell, "
+            "e.g. `export GOOGLE_API_KEY=...`; `dub doctor` will auto-recover "
+            "it from ~/.zshrc / ~/.bashrc on Hermes / CI shells"
+        )
+    # TTS-backend gates
+    if check_name == "interpreter":
+        if backend_name == "omnivoice":
+            return "fix: run `uv run dub bootstrap-omnivoice` to create the dedicated interpreter and wire paths.omnivoice_python"
+        if backend_name == "voxcpme":
+            return "fix: run `uv run dub bootstrap-voxcpm` to create the dedicated interpreter and wire paths.voxcpme_python"
+        return "fix: run the matching `uv run dub bootstrap-<backend>` to create the dedicated interpreter"
+    if check_name.startswith("deps:"):
+        mod = check_name.split(":", 1)[1]
+        if backend_name == "omnivoice":
+            return (
+                f"fix: re-run `uv run dub bootstrap-omnivoice`; the {mod} dependency is "
+                "missing from the dedicated OmniVoice interpreter"
+            )
+        if backend_name == "voxcpme":
+            return (
+                f"fix: re-run `uv run dub bootstrap-voxcpm`; the {mod} dependency is "
+                "missing from the dedicated VoxCPM interpreter"
+            )
+        return f"fix: re-run `dub bootstrap-{backend_name or '<backend>'}`; the {mod} dependency is missing"
+    if check_name == "service":
+        if backend_name == "voxcpme":
+            return (
+                "fix: start the local VoxCPM server with "
+                "`uv run python -m dub.tts_engines.voxcpme.server --port 8808` "
+                "(see docs/operator-runbook.md FR-9)"
+            )
+        return f"fix: start the {backend_name or '<backend>'} backend service, then re-run `dub doctor`"
+    if check_name == "config":
+        return f"fix: review your `paths.{backend_name or '<backend>'}_python` in the active config (default: ~/.config/dub/config.yaml)"
+    if check_name == "wrapper":
+        return f"fix: reinstall the {backend_name or '<backend>'} TTS wrapper via `uv sync --extra all`"
+    # Python-import gates under real-backend py:* checks
+    if check_name.startswith("py:"):
+        mod = check_name.split(":", 1)[1]
+        return f"fix: re-run `uv sync --extra all`; the {mod} Python package is missing from the dub venv"
+    return None
 
 
 def _bootstrap_backend_venv(*, backend_name: str, extra_name: str, path_key: str, venv_path: Path, config_path: Path) -> Path:
