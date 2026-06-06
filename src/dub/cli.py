@@ -962,10 +962,10 @@ def auto(video, source_lang, project_dir, config_path, translate_mode, translate
        classified by character script. The preflight line prints
        `route_basis=detected:<lang>-asr-head`.
     3. Ambiguous detection (no audio track, mixed script, ASR
-       unavailable, etc.) fails fast *before* any stage work starts;
-       `dub auto` does not silently fall back to
-       `cfg.defaults.source_lang`. The error message tells the
-       operator to re-run with `--source-lang en|ja`.
+        unavailable, etc.) fails fast *before* any stage work starts;
+        `dub auto` does not silently fall back to `cfg.defaults.source_lang`.
+        The error message tells the operator to re-run with `--source-lang en|ja`,
+        or to use `dub en2zh` / `dub ja2zh` as a direct bypass.
     """
     try:
         cfg = load_config(config_path)

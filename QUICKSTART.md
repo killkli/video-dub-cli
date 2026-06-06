@@ -87,6 +87,8 @@ next:    uv run dub auto <video>
 
 `dub auto` 執行 30 秒音訊探針，自動判斷來源語言（英文或日文），再選擇對應路線。明確的 `--source-lang` 永遠優先。
 
+若自動偵測失敗（無音軌、混合文字、ASR 不可用等），CLI 會快速失敗並印出重新執行的引導；若遇到此情況，請用 `--source-lang en|ja` 或直接使用下方的語言專用別名繞過偵測（見 [runbook FR-0](./docs/operator-runbook.md#fr-0-dub-auto-自動偵測失敗請加---source-lang)）。
+
 ```bash
 uv run dub auto talk.mp4           # 自動偵測（30 秒探針後選路）
 uv run dub auto talk.mp4 --source-lang en    # 明確指定英文→中文
