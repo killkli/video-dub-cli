@@ -1515,6 +1515,7 @@ def _bootstrap_backend_venv(*, backend_name: str, extra_name: str, path_key: str
 
     runtime_import_probes = {
         "omnivoice": ["torch", "omnivoice", "opencc"],
+        "stems": ["demucs_mlx", "tqdm"],
         "voxcpm": ["gradio_client", "opencc", "gradio", "torch", "funasr", "voxcpm"],
     }
     imports_to_probe = runtime_import_probes.get(backend_name, [])

@@ -177,3 +177,16 @@ def test_dub_doctor_prints_no_remediation_lines_when_all_gates_ok(runner, monkey
     assert "doctor fix:" not in result.output
     # Success path still has the canonical "next" pointer.
     assert "doctor next:" in result.output
+
+
+def test_dub_doctor_stems_readiness_checks_tqdm_gate(runner, monkeypatch):
+    """Regression: stems readiness must probe every import gate the vendored
+    runtime needs, including ``tqdm``, so doctor cannot print a false READY
+    before stage 01_stems runs."""
+    _patch_all_checks_ok(monkeypatch)
+
+    result = runner.invoke(main, ["doctor"])
+    assert result.exit_code == 0, result.output
+    assert "stems:" in result.output
+    assert "deps:demucs_mlx: OK" in result.output
+    assert "deps:tqdm: OK" in result.output

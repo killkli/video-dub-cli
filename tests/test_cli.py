@@ -1,9 +1,11 @@
+import sys
 from pathlib import Path
 
 import pytest
 import yaml
 from click.testing import CliRunner
 from dub.cli import main
+from dub.config import DubConfig, PathsConfig
 from dub.state import load_state
 from dub.state import save_state
 
@@ -425,6 +427,42 @@ def test_dub_bootstrap_voxcpm_updates_config(runner, monkeypatch, tmp_path):
     )
     assert "wrote paths.voxcpme_python" in result.output
     assert "dub.tts_engines.voxcpme.server --port 8808" in result.output
+
+
+def test_dub_bootstrap_stems_updates_config(runner, monkeypatch, tmp_path):
+    calls = []
+
+    def fake_run(cmd, check, cwd):
+        calls.append((cmd, check, cwd))
+        if cmd[1] == "venv":
+            venv_dir = Path(cmd[2])
+            (venv_dir / "bin").mkdir(parents=True, exist_ok=True)
+            (venv_dir / "bin" / "python").write_text("#!/bin/sh\n", encoding="utf-8")
+        return None
+
+    monkeypatch.setattr("dub.cli.shutil.which", lambda name: "/opt/homebrew/bin/uv" if name == "uv" else None)
+    monkeypatch.setattr("dub.cli.subprocess.run", fake_run)
+
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text("translation:\n  provider: gemini\n", encoding="utf-8")
+    venv_dir = tmp_path / "stems-venv"
+    result = runner.invoke(
+        main,
+        ["bootstrap-stems", "--venv-path", str(venv_dir), "--config", str(cfg)],
+    )
+    assert result.exit_code == 0
+    data = yaml.safe_load(cfg.read_text(encoding="utf-8"))
+    assert data["paths"]["stems_python"] == str((venv_dir / "bin" / "python").resolve())
+    assert any(cmd[0][1] == "venv" for cmd in calls)
+    assert any(cmd[0][1:4] == ["pip", "install", "--python"] for cmd in calls)
+    assert any(
+        cmd[0][0].endswith("python")
+        and cmd[0][1] == "-c"
+        and "import demucs_mlx" in cmd[0][2]
+        and "import tqdm" in cmd[0][2]
+        for cmd in calls
+    )
+    assert "wrote paths.stems_python" in result.output
 
 
 def test_dub_doctor_reports_missing_prereqs(runner, tmp_path, monkeypatch):
@@ -1671,8 +1709,14 @@ def test_dub_doctor_success_message_names_auto_workflow_lane(runner, monkeypatch
     monkeypatch.setattr("dub.cli._which_status", _ok_which)
     monkeypatch.setattr("dub.cli._path_status", _ok_path)
     monkeypatch.setattr("dub.cli._env_status", _ok_env)
+    monkeypatch.setattr(
+        "dub.cli.load_config",
+        lambda _config_path=None: DubConfig(
+            paths=PathsConfig(stems_python=Path(sys.executable))
+        ),
+    )
 
-    def _ok_python_imports(_name):
+    def _ok_python_imports(_name, interpreter=None):
         return ("ok", "/fake/import/path.py")
 
     monkeypatch.setattr("dub.tts_engines.diagnostics.python_imports", _ok_python_imports)
@@ -1705,7 +1749,7 @@ def test_dub_doctor_fails_when_any_route_backend_is_blocked(runner, monkeypatch)
     monkeypatch.setattr("dub.cli._which_status", lambda _name: (True, "/bin/fake"))
     monkeypatch.setattr("dub.cli._path_status", lambda _p: (True, "/fake/path"))
     monkeypatch.setattr("dub.cli._env_status", lambda *_names: (True, "GOOGLE_API_KEY"))
-    monkeypatch.setattr("dub.tts_engines.diagnostics.python_imports", lambda _name: ("ok", "/fake/import/path.py"))
+    monkeypatch.setattr("dub.tts_engines.diagnostics.python_imports", lambda _name, interpreter=None: ("ok", "/fake/import/path.py"))
 
     blocked_omni = TtsReadiness(backend="omnivoice", ready=False, detail="missing transformers", checks=[])
     ready_vox = TtsReadiness(backend="voxcpme", ready=True, detail="ready", checks=[])
@@ -1734,7 +1778,7 @@ def test_dub_doctor_fails_when_vox_service_is_only_warn(runner, monkeypatch):
     monkeypatch.setattr("dub.cli._which_status", lambda _name: (True, "/bin/fake"))
     monkeypatch.setattr("dub.cli._path_status", lambda _p: (True, "/fake/path"))
     monkeypatch.setattr("dub.cli._env_status", lambda *_names: (True, "GOOGLE_API_KEY"))
-    monkeypatch.setattr("dub.tts_engines.diagnostics.python_imports", lambda _name: ("ok", "/fake/import/path.py"))
+    monkeypatch.setattr("dub.tts_engines.diagnostics.python_imports", lambda _name, interpreter=None: ("ok", "/fake/import/path.py"))
 
     ready_omni = TtsReadiness(backend="omnivoice", ready=True, detail="ready", checks=[])
     warn_vox = TtsReadiness(

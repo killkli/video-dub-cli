@@ -37,12 +37,13 @@ def readiness(config: DubConfig) -> TtsReadiness:
 
     1. wrapper — the vendored vocal_remover CLI module exists
     2. interpreter — stems_python (or dub venv fallback) runs
-    3. deps:demucs_mlx — the heavy inference stack is importable
+    3. deps:* — every import gate the vendored runtime needs is importable
 
     Model weights are deliberately not probed here; that's a bootstrap
     / first-run download concern, not a doctor gate.
     """
     checks: list[tuple[str, str, str]] = []
+    runtime_imports = ("demucs_mlx", "tqdm")
 
     # Gate 1: wrapper — can we invoke `python -m vocal_remover`?
     # The module lives under src/vocal_remover/ in this repo.
@@ -63,11 +64,14 @@ def readiness(config: DubConfig) -> TtsReadiness:
         ))
         interp = fallback
 
-    # Gate 3: demucs-mlx importable under the chosen interpreter
+    # Gate 3: the vendored runtime's Python imports are available under
+    # the chosen interpreter. Keep this in sync with src/vocal_remover/cli.py.
     if interp.exists():
-        checks.append(("deps:demucs_mlx", *diag.python_imports("demucs_mlx", interpreter=interp)))
+        for module_name in runtime_imports:
+            checks.append((f"deps:{module_name}", *diag.python_imports(module_name, interpreter=interp)))
     else:
-        checks.append(("deps:demucs_mlx", "skipped", "no interpreter; can't probe"))
+        for module_name in runtime_imports:
+            checks.append((f"deps:{module_name}", "skipped", "no interpreter; can't probe"))
 
     ready, detail = diag.aggregate(checks)
     return TtsReadiness(
