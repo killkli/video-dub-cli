@@ -69,7 +69,7 @@ covered here.
 
 ### 2.3 Documentation — `docs/operator-runbook.md`
 
-A new `### FR-7：長 SRT 翻譯（Phase 1C 合約）` section was added at the
+A new `### FR-6：長 SRT 翻譯（Phase 1C 合約）` section was added at the
 end of §3 (最常見的錯誤情境). It does three things:
 
 1. States the **current** behavior — single Gemini call, no batch
@@ -81,8 +81,14 @@ end of §3 (最常見的錯誤情境). It does three things:
    `batch_index=N`) that a future runtime wave will add — without
    promising they exist today.
 
-The numbering is local to §3 to avoid colliding with the doc-level
-`FR-6`–`FR-9` sections in §4.
+The numbering is now globally unique: §3 runs FR-1..FR-6 and §4 runs
+FR-0 plus FR-7..FR-10 (so `repo_pipeline_scripts`, `gemini_api_key`,
+`omnivoice: BLOCKED`, `voxcpme: BLOCKED` each have a unique slot). The
+earlier `FR-7` numbering for this section was an intentional "local to §3"
+choice to avoid colliding with §4's `FR-6`–`FR-9` range, but the QA card
+flagged that two `FR-7` headings (this one and `gemini_api_key: MISSING`)
+made the doc ambiguous for cross-references; the [P1-cleanup] follow-up
+renumbered both sides so the runbook is unique end to end.
 
 ---
 
@@ -162,7 +168,7 @@ minimum work is:
 4. Add a focused test for the wired-up runtime path that monkey-patches
    `_call_gemini` to assert batch boundaries are respected and the
    verifier runs.
-5. Update the operator runbook `### FR-7` section to flip "目前正式行為"
+5. Update the operator runbook `### FR-6` section to flip "目前正式行為"
    from "single call" to "batched call" and describe the new log
    markers.
 

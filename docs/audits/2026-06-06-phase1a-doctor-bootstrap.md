@@ -42,7 +42,7 @@ Performed before commit:
 2. `uv run dub doctor` → with the operator's real env, surfaces the
    `service: warn (127.0.0.1:8808 unreachable ...)` gate, the lane summary
    `doctor lanes: ready=\`dub en2zh\` ; blocked=\`dub ja2zh\``, the new fix
-   line `doctor fix: start the local VoxCPM server with \`uv run python -m dub.tts_engines.voxcpme.server --port 8808\` (see docs/operator-runbook.md FR-9)`,
+   line `doctor fix: start the local VoxCPM server with \`uv run python -m dub.tts_engines.voxcpme.server --port 8808\` (see docs/operator-runbook.md FR-10)`,
    and the new close `doctor next: re-run \`uv run dub doctor\` after the fix above lands; full failure list is in the lanes summary above`.
 3. `uv run dub bootstrap` → body unchanged, new closing lines
    `bootstrap next: run \`uv run dub doctor\` to confirm every gate; once it prints \`doctor ok: ready for dub auto...\`, the canonical smoke is \`uv run dub auto <VIDEO>\``

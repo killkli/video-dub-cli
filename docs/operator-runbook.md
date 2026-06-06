@@ -218,7 +218,7 @@ uv run dub resume --project-dir /path/to/project
 
 ---
 
-### FR-7：長 SRT 翻譯（Phase 1C 合約）
+### FR-6：長 SRT 翻譯（Phase 1C 合約）
 
 **目前正式行為（2026-06-06）**
 
@@ -278,7 +278,7 @@ uv run dub ja2zh anime.mp4   # 日文→中文，不經自動偵測
 
 ---
 
-### FR-6：`repo_pipeline_scripts: MISSING`
+### FR-7：`repo_pipeline_scripts: MISSING`
 
 **症狀**
 
@@ -302,7 +302,7 @@ uv run dub doctor
 
 ---
 
-### FR-7：`gemini_api_key: MISSING`
+### FR-8：`gemini_api_key: MISSING`
 
 **症狀**
 
@@ -329,7 +329,7 @@ uv run dub doctor
 
 ---
 
-### FR-8：`omnivoice: BLOCKED`
+### FR-9：`omnivoice: BLOCKED`
 
 **症狀**
 
@@ -353,7 +353,7 @@ uv run dub doctor --config ~/.config/dub/config.yaml
 
 ---
 
-### FR-9：`voxcpme: BLOCKED`
+### FR-10：`voxcpme: BLOCKED`
 
 **常見原因**
 
