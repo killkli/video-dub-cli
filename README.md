@@ -205,14 +205,18 @@ doctor lanes: ready=`dub ja2zh` ; blocked=`dub en2zh`
 ├── 02_stems/
 ├── 03_asr/
 ├── 04_ref_audio/
-├── 05_translate/
-├── 05_translated_srt/
+├── 05_translated_srt/          # 翻譯 SRT（TTS 與組裝的輸入）
 ├── 06_tts_wav/
 ├── 07_final/
 │   └── video_dubbed_stem.mp4   # 最終產物
 └── .dub/
     ├── state.json
     └── *.log
+
+# Stage 4 "04_translate" 偶爾會寫一份
+# 次要的 05_translate/video.zhtw.srt，
+# 但 canonical 位置是 05_translated_srt/video.zhtw.srt，
+# 由 TTS 與組裝階段直接取用。
 ```
 
 完成時會印出最終影片的完整路徑。
