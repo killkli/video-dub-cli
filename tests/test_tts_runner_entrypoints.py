@@ -22,14 +22,24 @@ Scope:
 from __future__ import annotations
 
 import importlib
+import importlib.util
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _load_vox_script_module():
+    script = REPO_ROOT / "vendor" / "pipeline_scripts" / "dubbing_batch_tts_vox.py"
+    spec = importlib.util.spec_from_file_location("_test_vox_script", script)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _run_module_entrypoint(module: str, *args: str) -> subprocess.CompletedProcess:
@@ -149,7 +159,7 @@ def test_runner_resolution_raises_clear_error_when_layout_broken(
     # Patch the package's __file__ to point at a path that has no
     # vendor/ ancestor. ``resolve_vendor_script`` will then walk
     # all the way up to / without finding the script and raise.
-    fake_dir = monkeypatch.setattr(voxcpme, "__file__", "/nonexistent/runner.py")
+    monkeypatch.setattr(voxcpme, "__file__", "/nonexistent/runner.py")
     # The module's __file__ is read at function-call time inside
     # resolve_vendor_script via Path(__file__).resolve(), which
     # reads the function's __globals__ at call time. We need to
@@ -164,3 +174,57 @@ def test_runner_resolution_raises_clear_error_when_layout_broken(
     # The error names the script and the broken layout.
     assert "dubbing_batch_tts_vox.py" in msg
     assert "Repo layout invariant broken" in msg
+
+
+def test_vox_script_generate_one_forwards_denoise_flag() -> None:
+    mod = _load_vox_script_module()
+
+    class FakeClient:
+        def __init__(self) -> None:
+            self.calls: list[dict[str, object]] = []
+
+        def predict(self, **kwargs):
+            self.calls.append(kwargs)
+            return "/tmp/fake.wav"
+
+    client = FakeClient()
+    result = mod.generate_one(client, "你好", "/tmp/ref.wav", "ja text", denoise=False)
+
+    assert result == "/tmp/fake.wav"
+    assert len(client.calls) == 1
+    assert client.calls[0]["denoise"] is False
+
+
+def test_vox_script_retries_without_denoise_for_denoise_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    mod = _load_vox_script_module()
+    calls: list[bool] = []
+
+    def fake_generate_one(client, text, ref_wav_path, ref_text, cfg=2.0, steps=10, *, denoise=True):
+        calls.append(denoise)
+        if denoise:
+            raise RuntimeError(
+                "Audio denoising processing failed: maximum size for tensor at dimension 1 is 6080 but size is 6400"
+            )
+        return "/tmp/recovered.wav"
+
+    monkeypatch.setattr(mod, "generate_one", fake_generate_one)
+
+    result, used_fallback = mod.generate_one_with_fallback(
+        object(), "你好", "/tmp/ref.wav", "ja text"
+    )
+
+    assert result == "/tmp/recovered.wav"
+    assert used_fallback is True
+    assert calls == [True, False]
+
+
+def test_vox_script_reraises_non_denoise_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    mod = _load_vox_script_module()
+
+    def fake_generate_one(client, text, ref_wav_path, ref_text, cfg=2.0, steps=10, *, denoise=True):
+        raise RuntimeError("server unavailable")
+
+    monkeypatch.setattr(mod, "generate_one", fake_generate_one)
+
+    with pytest.raises(RuntimeError, match="server unavailable"):
+        mod.generate_one_with_fallback(object(), "你好", "/tmp/ref.wav", "ja text")

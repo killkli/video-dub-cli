@@ -30,8 +30,15 @@ VoxCPM server 需先啟動（`cd ~/Dev/VoxCPM && .venv/bin/python app.py --port 
 執行環境：必須在 `~/.hermes/hermes-agent/venv` 內（gradio_client + opencc 都在那）。
 """
 from __future__ import annotations
-import os, sys, json, time, argparse, shutil, subprocess
+
+import argparse
+import os
+import shutil
+import subprocess
+import sys
+import time
 from pathlib import Path
+from typing import Any
 
 # ``gradio_client`` is intentionally NOT imported at module level.
 # ``--help`` and the ``dub doctor`` runtime probe must succeed on a
@@ -48,8 +55,8 @@ def dur(p: str) -> float:
     return float(r.stdout.strip() or 0)
 
 
-def generate_one(client: Client, text: str, ref_wav_path: str, ref_text: str,
-                 cfg: float = 2.0, steps: int = 10) -> str:
+def generate_one(client: Any, text: str, ref_wav_path: str, ref_text: str,
+                 cfg: float = 2.0, steps: int = 10, *, denoise: bool = True) -> str:
     """呼叫 /generate endpoint,Ultimate Cloning 模式 (ref_wav + prompt_text)。
     回傳 server 端 wav 路徑。
     Gradio FileData 必須包成 {"path": ..., "meta": {"_type": "gradio.FileData"}}。
@@ -65,11 +72,35 @@ def generate_one(client: Client, text: str, ref_wav_path: str, ref_text: str,
         prompt_text_value="",
         cfg_value=cfg,
         do_normalize=True,
-        denoise=True,
+        denoise=denoise,
         dit_steps=steps,
         api_name="/generate",
     )
     return result
+
+
+def generate_one_with_fallback(
+    client: Any,
+    text: str,
+    ref_wav_path: str,
+    ref_text: str,
+    cfg: float = 2.0,
+    steps: int = 10,
+) -> tuple[str, bool]:
+    try:
+        return generate_one(client, text, ref_wav_path, ref_text, cfg, steps), False
+    except Exception as exc:
+        if "Audio denoising processing failed" not in str(exc):
+            raise
+        return generate_one(
+            client,
+            text,
+            ref_wav_path,
+            ref_text,
+            cfg,
+            steps,
+            denoise=False,
+        ), True
 
 
 def parse_srt(path: str) -> dict[int, dict]:
@@ -79,13 +110,15 @@ def parse_srt(path: str) -> dict[int, dict]:
     out = {}
     for block in content.strip().split("\n\n"):
         lines = block.strip().split("\n")
-        if len(lines) < 3: continue
+        if len(lines) < 3:
+            continue
         try:
             idx = int(lines[0])
             t = lines[1].split(" --> ")
             text = "\n".join(lines[2:]).strip()
             out[idx] = {"start": t[0].strip(), "end": t[1].strip(), "text": text}
-        except: pass
+        except Exception:
+            pass
     return out
 
 
@@ -221,9 +254,16 @@ def main():
         final_text = t2s.convert(zh_text) if t2s else zh_text
 
         try:
-            t_send = time.time()
-            server_path = generate_one(client, final_text, str(ref_audio), ja_text, args.cfg, args.steps)
-            t_gen = time.time() - t_send
+            server_path, used_denoise_fallback = generate_one_with_fallback(
+                client,
+                final_text,
+                str(ref_audio),
+                ja_text,
+                args.cfg,
+                args.steps,
+            )
+            if used_denoise_fallback:
+                print(f"  [{n}/{len(indices)}] line_{idx} RETRY denoise=False", flush=True)
 
             if not server_path or not Path(server_path).exists():
                 print(f"  [{n}/{len(indices)}] line_{idx} FAIL: server returned {server_path}", flush=True)
@@ -256,9 +296,6 @@ def main():
             # Post-process: atempo to align TTS duration with SRT target
             if atempo_align(out_wav, target_dur):
                 new_dur = dur(str(out_wav))
-                tts_orig = dur(str(out_wav))  # 已經是 atempo 後
-                # 我們需要原 TTS 長度做 log,但 atempo_align 內已 in-place 改掉了。
-                # 簡化：直接 log 新時長
                 elapsed = time.time() - t0
                 avg = elapsed / n
                 if abs(new_dur - target_dur) < 0.1:
