@@ -5,8 +5,10 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import wave
+from collections.abc import Iterable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterable
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from demucs_mlx import Separator
@@ -17,10 +19,9 @@ except ImportError:  # pragma: no cover
     tqdm = None
 
 try:
-    from demucs_mlx import Separator, save_audio
+    from demucs_mlx import Separator
 except ImportError:  # pragma: no cover
     Separator = None  # type: ignore[assignment]
-    save_audio = None
 
 AUDIO_EXTENSIONS = {".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg"}
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".m4v"}
@@ -121,7 +122,7 @@ def combine_inputs(args: argparse.Namespace) -> list[str]:
 
 
 def require_backend_installed() -> None:
-    if Separator is None or save_audio is None or tqdm is None:
+    if Separator is None or tqdm is None:
         raise SeparationError(
             "Project dependencies are not installed in this Python environment (missing demucs-mlx and/or tqdm). "
             "Install project dependencies first, e.g. 'uv sync --extra stems' or 'uv run dub bootstrap-stems'."
@@ -204,11 +205,69 @@ def decode_to_wav(input_path: Path, wav_path: Path, ffmpeg: str, verbose: bool =
 
 
 def export_stem_wav(stem_audio: Any, output_path: Path, samplerate: int, verbose: bool = False) -> None:
+    import numpy as np
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     if verbose:
         print(f"Writing {output_path}", flush=True)
-    assert save_audio is not None
-    save_audio(stem_audio, str(output_path), samplerate=samplerate)
+
+    audio = np.asarray(stem_audio, dtype=np.float32)
+    if audio.ndim == 1:
+        audio = audio[None, :]
+    if audio.ndim != 2:
+        raise SeparationError(f"Expected stem audio with 1 or 2 dimensions, got shape {audio.shape}")
+
+    peak = float(np.max(np.abs(audio), initial=0.0))
+    if peak > 1.0:
+        audio = audio / max(1.01 * peak, 1.0)
+    audio = np.clip(audio, -1.0, 1.0)
+    pcm = np.rint(audio.T * 32767.0).astype("<i2")
+
+    with wave.open(str(output_path), "wb") as wav_file:
+        wav_file.setnchannels(int(audio.shape[0]))
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(int(samplerate))
+        wav_file.writeframes(pcm.tobytes())
+
+
+def load_decoded_wav(decoded_wav: Path) -> Any:
+    import numpy as np
+
+    with wave.open(str(decoded_wav), "rb") as wav_file:
+        channels = wav_file.getnchannels()
+        sample_width = wav_file.getsampwidth()
+        frame_count = wav_file.getnframes()
+        if wav_file.getcomptype() != "NONE":
+            raise SeparationError(f"Unsupported WAV compression: {wav_file.getcomptype()}")
+        frames = wav_file.readframes(frame_count)
+
+    sample_formats = {
+        2: (np.int16, 32768.0),
+        4: (np.int32, 2147483648.0),
+    }
+    sample_format = sample_formats.get(sample_width)
+    if sample_format is None:
+        raise SeparationError(f"Unsupported WAV sample width: {sample_width}")
+
+    dtype, scale = sample_format
+    audio = np.frombuffer(frames, dtype=dtype)
+    expected_size = frame_count * channels
+    if audio.size != expected_size:
+        raise SeparationError(
+            f"Decoded WAV frame count mismatch: expected {expected_size} samples, got {audio.size}"
+        )
+    return audio.reshape(frame_count, channels).T.astype(np.float32) / scale
+
+
+def separate_audio_with_fallback(separator: Separator, decoded_wav: Path) -> dict[str, Any]:
+    try:
+        _, stems = separator.separate_audio_file(str(decoded_wav))
+        return stems
+    except TypeError as exc:
+        if "Unable to convert function return value to a Python type" not in str(exc):
+            raise
+        _, stems = separator.separate_tensor(load_decoded_wav(decoded_wav))
+        return stems
 
 
 def separate_file(
@@ -226,7 +285,7 @@ def separate_file(
         decode_to_wav(input_path, decoded_wav, ffmpeg=ffmpeg, verbose=verbose)
         if verbose:
             print(f"Running separation for {input_path.name}", flush=True)
-        _, stems = separator.separate_audio_file(str(decoded_wav))
+        stems = separate_audio_with_fallback(separator, decoded_wav)
 
         missing = [stem for stem in output_paths if stem not in stems]
         if missing:
