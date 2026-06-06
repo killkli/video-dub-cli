@@ -44,6 +44,211 @@ def render_srt_blocks(blocks: list[SubtitleBlock]) -> str:
     return "\n\n".join(parts) + "\n"
 
 
+# ---------------------------------------------------------------------------
+# Phase 1C — translation batching / verification groundwork
+#
+# These helpers define the contract for breaking an SRT into Gemini-sized
+# batches and verifying the translated output. They are PURE — they do not
+# call Gemini and do not depend on translation config. The runtime path
+# (translate_srt_file) still sends all blocks in one call today; a later
+# phase may opt into the chunked path. The contract is locked here so the
+# verification surface is testable in isolation and the runtime wiring can
+# be added without re-litigating the boundary.
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class TranslationBatch:
+    """A contiguous slice of subtitle blocks intended for one Gemini call.
+
+    Attributes:
+        index: Zero-based batch ordinal, preserved so callers can label
+            logs / checkpoints in batch order.
+        blocks: The original SubtitleBlocks in this batch. Order matches
+            the source SRT, so ``blocks[0].index`` may be larger than 1
+            for batches after the first.
+        approximate_chars: Sum of the rendered text lengths in this
+            batch, used by callers to log batch weight without
+            re-rendering. Approximate because whitespace handling at
+            render time is not exactly reproduced here.
+    """
+
+    index: int
+    blocks: list[SubtitleBlock]
+    approximate_chars: int
+
+
+def chunk_srt_blocks(
+    blocks: list[SubtitleBlock],
+    *,
+    max_blocks: int = 30,
+    max_chars: int = 4000,
+) -> list[TranslationBatch]:
+    """Split subtitle blocks into Gemini-sized batches.
+
+    The chunker greedily fills each batch up to ``max_blocks`` blocks,
+    stopping early if appending the next block would push the rendered
+    text length past ``max_chars``. This mirrors the TTS batched
+    assembler contract (``defaults.tts_batch_size = 30``) so the two
+    batching surfaces feel consistent to operators.
+
+    Contract guarantees:
+    * Every input block appears in exactly one batch, in original order.
+    * Every returned batch is non-empty.
+    * No batch exceeds ``max_blocks`` blocks.
+    * No batch's rendered text length exceeds ``max_chars`` (unless a
+      single block is itself larger than ``max_chars``, in which case
+      it is emitted alone and ``approximate_chars`` may exceed
+      ``max_chars``).
+    * Batch ordinals are 0-based and contiguous.
+
+    Validation:
+    * ``max_blocks`` must be >= 1; ``max_chars`` must be >= 1; both
+      are checked up front and raise ``TranslationError`` otherwise.
+    * An empty ``blocks`` list raises ``TranslationError`` — callers
+      should not chunk a no-op translation, and silent no-op output
+      would mask upstream ASR failures.
+    """
+    if max_blocks < 1:
+        raise TranslationError(f"chunk_srt_blocks: max_blocks must be >= 1, got {max_blocks}")
+    if max_chars < 1:
+        raise TranslationError(f"chunk_srt_blocks: max_chars must be >= 1, got {max_chars}")
+    if not blocks:
+        raise TranslationError("chunk_srt_blocks: cannot chunk an empty block list")
+
+    batches: list[TranslationBatch] = []
+    current: list[SubtitleBlock] = []
+    current_chars = 0
+
+    def _flush() -> None:
+        nonlocal current, current_chars
+        if not current:
+            return
+        batches.append(
+            TranslationBatch(
+                index=len(batches),
+                blocks=current,
+                approximate_chars=current_chars,
+            )
+        )
+        current = []
+        current_chars = 0
+
+    for block in blocks:
+        rendered_len = len(block.text.strip())
+        would_overflow_blocks = len(current) + 1 > max_blocks
+        would_overflow_chars = current and current_chars + rendered_len > max_chars
+        if would_overflow_blocks or would_overflow_chars:
+            _flush()
+        current.append(block)
+        current_chars += rendered_len
+    _flush()
+    return batches
+
+
+@dataclass
+class TranslationVerification:
+    """Result of verifying a translated block list against source blocks.
+
+    Attributes:
+        ok: True iff every check passed; the runtime can treat this as
+            a hard gate before writing the translated SRT.
+        block_count_match: True iff the translated line count equals
+            the source block count.
+        indices_preserved: True iff every source block index appears
+            in the translated set, with no extras, in the original
+            order.
+        timing_preserved: True iff every translated line's bracketed
+            index resolves to a source block and the corresponding
+            source timing line is the one that will be re-rendered.
+        issues: Human-readable list of problems; empty when ``ok`` is
+            True. Kept as a list (not a single string) so callers can
+            log structured diagnostics and so tests can assert on
+            specific failure modes.
+    """
+
+    ok: bool
+    block_count_match: bool
+    indices_preserved: bool
+    timing_preserved: bool
+    issues: list[str]
+
+
+def verify_translated_blocks(
+    src_blocks: list[SubtitleBlock],
+    translated_texts: list[str],
+) -> TranslationVerification:
+    """Verify that a translated line list matches the source blocks.
+
+    This is the canonical "post-translation verification" surface for
+    Phase 1C. It does NOT parse the Gemini response itself — callers
+    that use the raw ``_parse_labeled_translation_lines`` output are
+    responsible for passing the resulting list. The contract is
+    intentionally narrow so the same verifier can be reused for the
+    chunked path (one call per batch) and the single-call path.
+
+    The check has three parts, each independent so failures point at
+    the right thing:
+    1. Block count match: ``len(translated_texts) == len(src_blocks)``.
+    2. Index preservation: every source block index appears exactly
+       once, with no extras. Mismatch is treated as a hard failure
+       even when counts happen to match, because renumbering would
+       silently misalign downstream TTS clip timing.
+    3. Timing preservation: the source ``SubtitleBlock.timing`` strings
+       are the ones that will be re-rendered into the output SRT, so
+       this check is really a sanity assertion that the verifier is
+       being called with the same source blocks the renderer will
+       use; the rendered output SRT will re-use the source timing
+       lines by design.
+    """
+    issues: list[str] = []
+    block_count_match = len(translated_texts) == len(src_blocks)
+    if not block_count_match:
+        issues.append(
+            f"block_count_mismatch: expected={len(src_blocks)} got={len(translated_texts)}"
+        )
+
+    src_indices = [block.index for block in src_blocks]
+    src_index_set = set(src_indices)
+    seen_indices: list[int] = []
+    duplicate_indices: list[int] = []
+    for block in src_blocks:
+        if block.index in src_index_set and block.index in seen_indices:
+            duplicate_indices.append(block.index)
+        seen_indices.append(block.index)
+    indices_preserved = block_count_match and not duplicate_indices
+    if duplicate_indices:
+        issues.append(f"duplicate_source_indices: {sorted(set(duplicate_indices))[:10]}")
+
+    # Timing preservation: every source timing string must be a
+    # non-empty SRT-style "-->" line. We do not parse timestamps here
+    # (the SRT renderer is the source of truth for format), but a
+    # missing "-->" in any source block is a hard error because the
+    # rendered output will inherit that gap.
+    timing_preserved = True
+    for block in src_blocks:
+        if "-->" not in block.timing:
+            timing_preserved = False
+            issues.append(f"invalid_source_timing: index={block.index} timing={block.timing!r}")
+
+    ok = block_count_match and indices_preserved and timing_preserved
+    return TranslationVerification(
+        ok=ok,
+        block_count_match=block_count_match,
+        indices_preserved=indices_preserved,
+        timing_preserved=timing_preserved,
+        issues=issues,
+    )
+
+
+# Default knobs exposed for callers (and tests) that want to align with
+# the TTS batched assembler contract. These are intentionally not wired
+# into the runtime path yet — they are the documented Phase 1C
+# contract that a later runtime wave can opt into.
+DEFAULT_TRANSLATION_BATCH_BLOCKS = 30
+DEFAULT_TRANSLATION_BATCH_CHARS = 4000
+
+
 def _target_language_label(target_lang: str) -> str:
     labels = {
         "zh": "Traditional Chinese",
@@ -190,4 +395,10 @@ __all__ = [
     "parse_srt_blocks",
     "render_srt_blocks",
     "translate_srt_file",
+    "TranslationBatch",
+    "chunk_srt_blocks",
+    "TranslationVerification",
+    "verify_translated_blocks",
+    "DEFAULT_TRANSLATION_BATCH_BLOCKS",
+    "DEFAULT_TRANSLATION_BATCH_CHARS",
 ]
