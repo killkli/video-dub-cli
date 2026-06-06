@@ -218,6 +218,37 @@ uv run dub resume --project-dir /path/to/project
 
 ---
 
+### FR-7：長 SRT 翻譯（Phase 1C 合約）
+
+**目前正式行為（2026-06-06）**
+
+`Stage 4 / Translate` 目前**仍然以單次 Gemini 呼叫**送出整份 `03_asr/video.srt`。Phase 1C（見 `docs/plans/2026-06-06-phase1-quick-wins-plan.md` §WS-3）只先做合約面與驗證面的 groundwork，**尚未把 runtime 改為分批呼叫**。因此現在不會有「批次翻譯」這個開關可以開。
+
+**Phase 1C 已落地的合約（不影響現有行為）**
+
+下列兩個 helper 已加入 `src/dub/translator_gemini.py`，純函式、不打 Gemini，純粹是給未來 runtime 切換用的合約面：
+
+- `chunk_srt_blocks(blocks, *, max_blocks=30, max_chars=4000)` — 把 `SubtitleBlock` 串切成 `TranslationBatch` 串。預設值刻意對齊 `defaults.tts_batch_size = 30`，讓兩個 batching 面對 operator 讀起來一致。
+- `verify_translated_blocks(src_blocks, translated_texts)` — 回傳結構化的 `TranslationVerification`（`block_count_match` / `indices_preserved` / `timing_preserved` / `issues`）。runtime 拿到 Gemini 回應後應該跑這個檢查再寫 SRT。
+
+**Operator 該怎麼讀這個章節**
+
+如果你看到 `.dub/04_translate.log` 出現 `chunk_srt_blocks` 或 `verify_translated_blocks` 的錯誤訊息，那代表**未來某個 release** 把 runtime 切到分批路徑了；現在的 release 還不會看到。
+
+- 翻譯失敗但 Gemini 回應有缺漏 → 預期 `verify_translated_blocks` 會回 `block_count_mismatch` 或 `duplicate_source_indices`。
+- 翻譯卡住 → 先看 `.dub/04_translate.log` 內 `batch_index=N` 之類的訊息（這是未來 runtime 加進來的 checkpoint marker，現在還不會出現）。
+
+**處理方式（現在）**
+
+1. 重跑翻譯 stage：
+   ```bash
+   uv run dub clean --project-dir /path/to/project --stage 4
+   uv run dub resume --project-dir /path/to/project
+   ```
+2. 若 Gemini API 端真的回得不穩定，請把 `.dub/04_translate.log` 整份貼到 issue，並附上來源影片的 `03_asr/video.srt`，由維護者決定要不要在未來的 runtime 切到分批路徑。
+
+---
+
 ## 4. 與目前 standalone 契約直接相關的錯誤
 
 ### FR-0：`dub auto` 自動偵測失敗，請加 `--source-lang`
