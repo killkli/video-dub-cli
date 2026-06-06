@@ -267,12 +267,123 @@ def _final_output_path(project_dir: Path) -> Path:
     return project_dir / "07_final" / "video_dubbed_stem.mp4"
 
 
-def _recovery_hints(project_dir: Path) -> str:
-    return (
-        f"next: dub resume --project-dir {project_dir}\n"
-        f"next: dub status --project-dir {project_dir}\n"
-        f"next: dub validate --project-dir {project_dir}"
+# Stable name of the operator-runbook section that documents the
+# ``dub resume`` / ``dub clean`` recovery semantics. Pinned here so the
+# CLI's ``see:`` pointer and the runbook's section heading cannot
+# silently drift apart.
+_OPERATOR_RUNBOOK_RECOVERY_SECTION = "docs/operator-runbook.md#2-什麼時候用-resume-什麼時候用-clean"
+
+
+def _load_project_state_safely(project_dir: Path):
+    """Return the project's state object, or ``None`` when no state exists.
+
+    This is the shared load used by every recovery / truth surface so a
+    missing or malformed ``.dub/state.json`` is treated the same way:
+    "no state" — the operator should re-create the project, not see
+    spurious stack traces.
+    """
+    try:
+        return load_state(project_dir)
+    except (FileNotFoundError, Exception):  # noqa: BLE001 - defensive
+        return None
+
+
+def _project_recovery_plan(project_dir: Path, *, current: str | None = None) -> str:
+    """Return a multi-line ``next:`` / ``see:`` block describing the
+    canonical recovery path for ``project_dir``.
+
+    The block is what every recovery / truth surface (``dub status``,
+    ``dub clean``, ``dub validate`` failure paths, ``dub resume`` no-source
+    path, ``run complete`` / ``resume complete`` summaries) emits so the
+    operator gets a copy-paste-able recipe regardless of which command
+    surfaced the problem.
+
+    ``current`` is an optional hint for the calling command (e.g.
+    ``"status"``, ``"clean"``, ``"validate"``) and is only used to skip
+    recommending the command the operator just ran. The canonical recipe
+    always points at ``docs/operator-runbook.md §2`` as the durable
+    recovery reference so the runbook and CLI stay anchored.
+    """
+    lines: list[str] = []
+    state = _load_project_state_safely(project_dir)
+    if state is None:
+        # No state — the operator never created a project here. The
+        # recovery is "start fresh", not "resume".
+        if current != "auto":
+            lines.append(
+                f"next: re-create the project with `uv run dub auto <VIDEO> --project-dir {project_dir}` "
+                "(or `dub en2zh` / `dub ja2zh`); the path above has no .dub/state.json"
+            )
+        else:
+            lines.append(
+                f"next: this project directory has no .dub/state.json; pass a fresh video or "
+                "remove the directory to start over"
+            )
+        lines.append(
+            f"next: see `{_OPERATOR_RUNBOOK_RECOVERY_SECTION}` for the canonical "
+            "resume / clean decision matrix"
+        )
+        return "\n".join(lines)
+
+    failed_stages = [name for name, st in state.stages.items() if st.status == "failed"]
+    if failed_stages:
+        # At least one stage failed — ``dub resume`` would re-enter the
+        # same failing stage. The runbook's recovery semantics
+        # (§ 2 "用 clean --stage N + resume") require a clean of the
+        # failed stage first. We pin the highest-numbered failed stage
+        # because the stage map in ``dub clean`` keys on stage numbers.
+        stage_map = {
+            "01_stems": 1,
+            "02_asr": 2,
+            "03_ref_audio": 3,
+            "04_translate": 4,
+            "05_tts": 5,
+            "06_assemble": 6,
+        }
+        stage_nums = sorted({stage_map[name] for name in failed_stages if name in stage_map})
+        if stage_nums:
+            top = stage_nums[-1]
+            lines.append(
+                f"next: a stage failed (failed_stages={','.join(failed_stages)}); "
+                f"recover with `uv run dub clean --project-dir {project_dir} --stage {top}` "
+                f"then `uv run dub resume --project-dir {project_dir}`"
+            )
+        else:
+            lines.append(
+                f"next: a stage failed (failed_stages={','.join(failed_stages)}); "
+                f"recover with `uv run dub resume --project-dir {project_dir}` "
+                "and inspect `.dub/*.log` for the failing stage"
+            )
+    else:
+        # No failed stage — the project is either idle (pending stages)
+        # or fully done. The right next step depends on which.
+        final_mp4 = _final_output_path(project_dir)
+        if final_mp4.exists() and final_mp4.stat().st_size > 0:
+            lines.append(
+                f"next: project is complete; final artifact is `{final_mp4}`. "
+                f"verify with `uv run dub validate --project-dir {project_dir}`"
+            )
+        else:
+            if current != "resume":
+                lines.append(
+                    f"next: continue the pipeline with `uv run dub resume --project-dir {project_dir}` "
+                    "(or re-run from the failing stage with `dub clean --stage N` + `dub resume`)"
+                )
+            else:
+                lines.append(
+                    f"next: re-run with `uv run dub resume --project-dir {project_dir}`; "
+                    f"if a stage keeps failing, check `.dub/*.log` for the failing stage"
+                )
+
+    lines.append(
+        f"next: see `{_OPERATOR_RUNBOOK_RECOVERY_SECTION}` for the canonical "
+        "resume / clean decision matrix"
     )
+    return "\n".join(lines)
+
+
+def _recovery_hints(project_dir: Path) -> str:
+    return _project_recovery_plan(project_dir)
 
 
 def _operator_paths_summary(prefix: str, project_dir: Path) -> str:
@@ -987,7 +1098,12 @@ def resume_cmd(project_dir, config_path):
     cfg = load_config(config_path)
     project_dir.mkdir(parents=True, exist_ok=True)
     if not (project_dir / "01_raw_video" / "video.mp4").exists():
+        # P1B: a bare "(no source video)" line was leaving the operator
+        # stranded. The recovery plan now points at the canonical
+        # ``dub auto`` / ``dub en2zh`` / ``dub ja2zh`` recipes so they
+        # can re-create the project without re-reading the runbook.
         click.echo(f"resume: project={project_dir} (no source video)")
+        click.echo(_project_recovery_plan(project_dir, current="resume"))
         return
     _bootstrap_state(project_dir, cfg)
     cfg = _restore_cfg_from_state_inputs(project_dir, cfg)
@@ -1000,13 +1116,16 @@ def resume_cmd(project_dir, config_path):
 @click.option("--project-dir", required=True, type=click.Path(exists=True, path_type=Path))
 def status(project_dir):
     """Show stage-by-stage pipeline status."""
-    try:
-        state = load_state(project_dir)
-    except FileNotFoundError:
+    state = _load_project_state_safely(project_dir)
+    if state is None:
         click.echo(f"status: project={project_dir} (no state)")
+        click.echo(_project_recovery_plan(project_dir, current="status"))
         return
     for name, st in state.stages.items():
         click.echo(f"{name}: {st.status} attempts={st.attempts}")
+    # Always close with the recovery plan so the operator knows what
+    # to do after reading the status — even on a clean run.
+    click.echo(_project_recovery_plan(project_dir, current="status"))
 
 
 @main.command()
@@ -1034,6 +1153,10 @@ def clean(project_dir, keep_source, stage):
         if rel != ".dub":
             target.mkdir(parents=True, exist_ok=True)
     click.echo(f"clean complete: project={project_dir} stage={stage}")
+    # P1B: every clean must end with a copy-paste-able next step.
+    # Without this the operator could believe cleaning is the end of
+    # the recovery, when in fact they still have to ``dub resume``.
+    click.echo(_project_recovery_plan(project_dir, current="clean"))
 
 
 def _validate_translated_subtitle_contract(project_dir: Path, state) -> tuple[bool, str]:
@@ -1063,29 +1186,36 @@ def validate(project_dir):
             missing.append(rel)
     if missing:
         click.echo(f"validate: project={project_dir} missing={','.join(missing)}")
+        click.echo(_project_recovery_plan(project_dir, current="validate"))
         return
-    try:
-        state = load_state(project_dir)
-        stage_count = len(state.stages)
-    except FileNotFoundError:
+    state = _load_project_state_safely(project_dir)
+    if state is None:
+        # No state to validate against — the project skeleton exists
+        # but the pipeline was never started. Surface a clear
+        # recovery pointer that points at the canonical smoke command.
+        click.echo(_project_recovery_plan(project_dir, current="validate"))
         raise click.ClickException(
             f"validate failed: project={project_dir} missing state (.dub/state.json)"
         )
 
+    stage_count = len(state.stages)
     failed_stages = [name for name, st in state.stages.items() if st.status == "failed"]
     if failed_stages:
+        click.echo(_project_recovery_plan(project_dir, current="validate"))
         raise click.ClickException(
             f"validate failed: project={project_dir} failed_stages={','.join(failed_stages)}"
         )
 
     final_mp4 = _final_output_path(project_dir)
     if not final_mp4.exists() or final_mp4.stat().st_size == 0:
+        click.echo(_project_recovery_plan(project_dir, current="validate"))
         raise click.ClickException(
             f"validate failed: project={project_dir} missing final artifact {final_mp4}"
         )
 
     ok, detail = _validate_translated_subtitle_contract(project_dir, state)
     if not ok:
+        click.echo(_project_recovery_plan(project_dir, current="validate"))
         raise click.ClickException(f"validate failed: project={project_dir} {detail}")
 
     click.echo(f"validate ok: project={project_dir} stages={stage_count} {detail}")

@@ -91,6 +91,239 @@ def test_dub_clean_exits_zero(runner):
     assert result.exit_code == 0
 
 
+# ---------------------------------------------------------------------------
+# P1B regression: state-aware recovery guidance surfaces.
+#
+# The contract: every recovery / truth surface (``dub status``, ``dub clean``,
+# ``dub validate`` failure paths, ``dub resume`` no-source path, and the
+# run/resume success summaries) must end with a ``next:`` / ``see:`` block
+# built by ``_project_recovery_plan``. The block must:
+#
+#   1. Be state-aware — recommend ``dub auto`` / ``dub en2zh`` / ``dub ja2zh``
+#      when there is no state, and ``dub clean --stage N`` + ``dub resume``
+#      when a stage failed, and "verify with validate" when the final
+#      artifact already exists.
+#   2. Always end with a stable runbook anchor so the CLI and the runbook
+#      cannot silently drift apart.
+#
+# These tests pin the contract. If you change wording in the recovery
+# block, update the runbook and these assertions together.
+# ---------------------------------------------------------------------------
+
+# Stable runbook anchor mirrored in src/dub/cli.py. Locking it here so a
+# change in either place forces the other to move too.
+P1B_RUNBOOK_RECOVERY_ANCHOR = (
+    "docs/operator-runbook.md#2-什麼時候用-resume-什麼時候用-clean"
+)
+
+
+def _make_status_project(tmp_path, *, with_failed_stage=None, with_final=False):
+    """Build a project directory for ``dub status`` / ``dub clean`` /
+    ``dub resume`` / ``dub validate`` regression tests.
+
+    Returns the project_dir Path. Stage statuses are written via
+    ``save_state`` so the CLI's ``load_state`` sees a real state object.
+    """
+    project_dir = tmp_path / "proj"
+    for rel in [
+        "01_raw_video",
+        "02_stems",
+        "03_asr",
+        "04_ref_audio",
+        "05_translate",
+        "05_translated_srt",
+        "06_tts_wav",
+        "07_final",
+        ".dub",
+    ]:
+        (project_dir / rel).mkdir(parents=True, exist_ok=True)
+
+    stages = {
+        "01_stems": {"status": "done", "attempts": 1, "artifacts": [], "output_dir": "02_stems", "error": None},
+        "02_asr": {"status": "done", "attempts": 1, "artifacts": ["video.srt"], "output_dir": "03_asr", "error": None},
+        "03_ref_audio": {"status": "done", "attempts": 1, "artifacts": [], "output_dir": "04_ref_audio", "error": None},
+        "04_translate": {"status": "done", "attempts": 1, "artifacts": ["video.zhtw.srt"], "output_dir": "05_translated_srt", "error": None},
+        "05_tts": {"status": "pending", "attempts": 0, "artifacts": [], "output_dir": None, "error": None},
+        "06_assemble": {"status": "pending", "attempts": 0, "artifacts": [], "output_dir": None, "error": None},
+    }
+    if with_failed_stage is not None:
+        stages[with_failed_stage]["status"] = "failed"
+        stages[with_failed_stage]["error"] = "synthetic failure for P1B regression test"
+    if with_final:
+        # The success branch of ``_project_recovery_plan`` looks for
+        # ``07_final/video_dubbed_stem.mp4`` specifically.
+        (project_dir / "07_final" / "video_dubbed_stem.mp4").write_bytes(b"fake-mp4")
+
+    state = {
+        "project_id": project_dir.name,
+        "input": {"translate_mode": "delegate", "translated_srt": None},
+        "stages": stages,
+    }
+    save_state(project_dir, state)
+    return project_dir
+
+
+def test_p1b_status_no_state_surfaces_recreate_and_runbook(runner, tmp_path):
+    """``dub status`` on a directory with no .dub/state.json must
+    recommend the canonical re-create recipe and pin the runbook anchor.
+    """
+    project_dir = tmp_path / "no-state"
+    (project_dir / ".dub").mkdir(parents=True, exist_ok=True)
+
+    result = runner.invoke(main, ["status", "--project-dir", str(project_dir)])
+
+    assert result.exit_code == 0
+    assert "(no state)" in result.output
+    # The CLI's no-state recipe names the smoke commands explicitly.
+    assert "dub auto" in result.output
+    assert "dub en2zh" in result.output
+    assert "dub ja2zh" in result.output
+    # The CLI's no-state recipe must also pin the runbook so the operator
+    # can drill in. This anchors the CLI to the runbook and vice versa.
+    assert P1B_RUNBOOK_RECOVERY_ANCHOR in result.output
+
+
+def test_p1b_status_with_failed_stage_surfaces_clean_then_resume(runner, tmp_path):
+    """``dub status`` with a failed stage must surface the highest-numbered
+    failed stage's ``dub clean --stage N`` + ``dub resume`` recipe.
+    """
+    project_dir = _make_status_project(tmp_path, with_failed_stage="05_tts")
+
+    result = runner.invoke(main, ["status", "--project-dir", str(project_dir)])
+
+    assert result.exit_code == 0
+    # 05_tts maps to stage 5 in the canonical stage map; the recipe must
+    # recommend clean on stage 5.
+    assert "dub clean --project-dir" in result.output
+    assert "--stage 5" in result.output
+    assert "dub resume --project-dir" in result.output
+    # And the runbook anchor must still appear so the operator can drill in.
+    assert P1B_RUNBOOK_RECOVERY_ANCHOR in result.output
+
+
+def test_p1b_status_with_final_artifact_surfaces_verify_recipe(runner, tmp_path):
+    """``dub status`` on a complete project must recommend the
+    ``dub validate`` verification path, not ``dub resume``.
+    """
+    project_dir = _make_status_project(
+        tmp_path, with_failed_stage=None, with_final=True
+    )
+
+    result = runner.invoke(main, ["status", "--project-dir", str(project_dir)])
+
+    assert result.exit_code == 0
+    assert "project is complete" in result.output
+    assert "dub validate --project-dir" in result.output
+    assert P1B_RUNBOOK_RECOVERY_ANCHOR in result.output
+
+
+def test_p1b_clean_always_emits_recovery_plan(runner, tmp_path):
+    """``dub clean`` must end with a recovery plan so the operator knows
+    they still need to run ``dub resume`` after cleaning. Before P1B the
+    clean line was terminal and operators treated clean as the last step.
+    """
+    project_dir = _make_status_project(tmp_path)
+
+    result = runner.invoke(main, ["clean", "--project-dir", str(project_dir), "--stage", "5"])
+
+    assert result.exit_code == 0
+    assert "clean complete:" in result.output
+    # The recovery plan must follow the clean line; lock on the
+    # resume-recipe wording the helper emits.
+    assert "dub resume --project-dir" in result.output
+    assert P1B_RUNBOOK_RECOVERY_ANCHOR in result.output
+
+
+def test_p1b_resume_no_source_emits_recovery_plan(runner, tmp_path):
+    """``dub resume`` on a project with no source video must surface a
+    copy-paste-able re-create recipe. Before P1B the operator only saw
+    ``(no source video)`` and was stranded.
+    """
+    project_dir = tmp_path / "bare"
+    (project_dir / "01_raw_video").mkdir(parents=True, exist_ok=True)
+    # No ``video.mp4`` under 01_raw_video/ — that is what triggers the
+    # no-source branch in resume_cmd.
+
+    result = runner.invoke(main, ["resume", "--project-dir", str(project_dir)])
+
+    assert result.exit_code == 0
+    assert "(no source video)" in result.output
+    # The no-source recipe must point at the smoke commands.
+    assert "dub auto" in result.output
+    assert "dub en2zh" in result.output
+    assert "dub ja2zh" in result.output
+    assert P1B_RUNBOOK_RECOVERY_ANCHOR in result.output
+
+
+def test_p1b_validate_missing_state_emits_recovery_plan(runner, tmp_path):
+    """``dub validate`` on a directory with no .dub/state.json must
+    surface the recovery plan before raising ClickException. The plan
+    must include the smoke recipe AND the runbook anchor.
+    """
+    project_dir = tmp_path / "validate-no-state"
+    for rel in [
+        "01_raw_video",
+        "02_stems",
+        "03_asr",
+        "04_ref_audio",
+        "05_translate",
+        "05_translated_srt",
+        "06_tts_wav",
+        "07_final",
+        ".dub",
+    ]:
+        (project_dir / rel).mkdir(parents=True, exist_ok=True)
+
+    result = runner.invoke(main, ["validate", "--project-dir", str(project_dir)])
+
+    assert result.exit_code != 0
+    assert "validate failed:" in result.output
+    # Recovery plan must be present in the output even though we are
+    # raising ClickException.
+    assert "dub auto" in result.output
+    assert P1B_RUNBOOK_RECOVERY_ANCHOR in result.output
+
+
+def test_p1b_validate_failed_stage_emits_recovery_plan(runner, tmp_path):
+    """``dub validate`` on a project with a failed stage must surface
+    the clean-then-resume recipe before raising.
+    """
+    project_dir = _make_status_project(tmp_path, with_failed_stage="06_assemble")
+    # Add the final artifact directory so the failure mode is the
+    # failed-stage branch, not the missing-artifact branch.
+    (project_dir / "07_final" / "video_dubbed_stem.mp4").write_bytes(b"fake")
+
+    result = runner.invoke(main, ["validate", "--project-dir", str(project_dir)])
+
+    assert result.exit_code != 0
+    assert "validate failed:" in result.output
+    assert "failed_stages=06_assemble" in result.output
+    # 06_assemble is the highest stage, so clean must recommend stage 6.
+    assert "--stage 6" in result.output
+    assert P1B_RUNBOOK_RECOVERY_ANCHOR in result.output
+
+
+def test_p1b_recovery_anchor_matches_runbook_heading(runner, tmp_path):
+    """The CLI's recovery anchor (``docs/operator-runbook.md#2-...``)
+    must point at a section that actually exists in the runbook. If
+    someone renames the runbook section, this test catches the drift.
+    """
+    repo_root = Path(__file__).resolve().parents[1]
+    runbook = repo_root / "docs" / "operator-runbook.md"
+    assert runbook.exists(), f"runbook missing: {runbook}"
+
+    # The anchor is encoded as a URL fragment, so the literal heading
+    # text in the file is what matters. Strip the leading ``2-`` and
+    # trailing anchor style to get the heading.
+    runbook_text = runbook.read_text(encoding="utf-8")
+    assert "## 2. 什麼時候用 `resume`，什麼時候用 `clean`" in runbook_text, (
+        "P1B regression: CLI recovery anchor points at a runbook heading "
+        "that no longer exists. Update both ``_OPERATOR_RUNBOOK_RECOVERY_SECTION`` "
+        "in src/dub/cli.py and ``P1B_RUNBOOK_RECOVERY_ANCHOR`` in "
+        "tests/test_cli.py to match the new section heading."
+    )
+
+
 def test_dub_validate_exits_zero(runner):
     result = runner.invoke(main, ["validate", "--project-dir", "/tmp"])
     assert result.exit_code == 0
@@ -1101,9 +1334,13 @@ def test_dub_run_prints_preflight_route_summary(runner, tmp_path, monkeypatch):
     assert "provider=gemini" in preflight
     assert f"run plan: project={project_dir}" in result.output
     assert f"final={project_dir / '07_final' / 'video_dubbed_stem.mp4'}" in result.output
-    assert f"next: dub resume --project-dir {project_dir}" in result.output
-    assert f"next: dub status --project-dir {project_dir}" in result.output
-    assert f"next: dub validate --project-dir {project_dir}" in result.output
+    # P1B: the recovery pointer is now a state-aware block emitted by
+    # ``_project_recovery_plan``; the legacy flat
+    # ``next: dub resume --project-dir X`` / ``next: dub status ...`` /
+    # ``next: dub validate ...`` triple was replaced with a smarter
+    # single-pointer block that includes a runbook reference.
+    assert "next: continue the pipeline with `uv run dub resume --project-dir" in result.output
+    assert f"next: see `docs/operator-runbook.md#2-什麼時候用-resume-什麼時候用-clean`" in result.output
     assert f"run complete: project={project_dir}" in result.output
 
 
@@ -1150,9 +1387,15 @@ def test_dub_resume_restores_use_existing_route_from_state(runner, tmp_path, mon
     assert seen["translated_srt"] == str(external_srt)
     assert f"resume complete: project={project_dir}" in result.output
     assert f"final={project_dir / '07_final' / 'video_dubbed_stem.mp4'}" in result.output
-    assert f"next: dub resume --project-dir {project_dir}" in result.output
-    assert f"next: dub status --project-dir {project_dir}" in result.output
-    assert f"next: dub validate --project-dir {project_dir}" in result.output
+    # P1B: the recovery pointer is now a state-aware block. On a
+    # ``resume complete`` line the project has no failed stage and the
+    # final artifact is not yet on disk, so the contract surfaces
+    # "continue the pipeline with `uv run dub resume`" — i.e. re-run
+    # resume is the right next step. The new pointer also includes
+    # a stable runbook reference so the operator can drill into the
+    # full resume / clean decision matrix.
+    assert "next: continue the pipeline with `uv run dub resume --project-dir" in result.output
+    assert "next: see `docs/operator-runbook.md#2-什麼時候用-resume-什麼時候用-clean`" in result.output
 
 
 def test_dub_run_use_existing_fails_with_nonexistent_translated_srt_path(runner, tmp_path):
