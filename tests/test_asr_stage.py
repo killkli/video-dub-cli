@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 import wave
 from types import SimpleNamespace
@@ -53,6 +54,33 @@ def test_asr_stage_falls_back_to_vocals_stem_when_raw_video_missing(tmp_path, mo
 
     assert state.status == "done"
     assert seen["input_path"] == project_dir / "02_stems" / "video.mp4.vocals.wav"
+
+
+def test_asr_stage_routes_progress_messages_to_stage_log_and_restores_env(tmp_path, monkeypatch):
+    project_dir = tmp_path / "proj"
+    (project_dir / "01_raw_video").mkdir(parents=True)
+    (project_dir / ".dub").mkdir(parents=True)
+    (project_dir / "01_raw_video" / "video.mp4").write_bytes(b"fake")
+    monkeypatch.setenv("DUB_ASR_LOG_FILE", "/tmp/original-asr-log")
+
+    def fake_run_transcription(**kwargs):
+        log_file = os.environ.get("DUB_ASR_LOG_FILE")
+        assert log_file is not None
+        with open(log_file, "a", encoding="utf-8") as fh:
+            fh.write("asr: VAD found 3 speech segments\n")
+            fh.write("asr: transcribing segment 1/3 (0.00s-1.00s)\n")
+        return "1\n00:00:00,000 --> 00:00:01,000\nHello world\n"
+
+    monkeypatch.setattr("dub.stages.asr.run_transcription", fake_run_transcription)
+
+    state = ASRStage().run(project_dir, DubConfig())
+
+    assert state.status == "done"
+    assert os.environ.get("DUB_ASR_LOG_FILE") == "/tmp/original-asr-log"
+    log_text = (project_dir / ".dub" / "02_asr.log").read_text(encoding="utf-8")
+    assert "status=starting" in log_text
+    assert "asr: VAD found 3 speech segments" in log_text
+    assert "asr: transcribing segment 1/3 (0.00s-1.00s)" in log_text
 
 
 def test_asr_stage_fails_when_repo_pipeline_raises(tmp_path, monkeypatch):

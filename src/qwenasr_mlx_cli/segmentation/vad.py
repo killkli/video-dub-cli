@@ -15,12 +15,26 @@ word/segment timing.
 
 from __future__ import annotations
 
+import os
+import sys
 import tempfile
 from pathlib import Path
 
+from qwenasr_mlx_cli.backends.registry import BackendRegistry
 from qwenasr_mlx_cli.core.exceptions import ASRProcessingError
 from qwenasr_mlx_cli.core.types import Segment, SubtitleConfig
-from qwenasr_mlx_cli.backends.registry import BackendRegistry
+
+
+def _emit_progress(message: str) -> None:
+    print(message, file=sys.stderr, flush=True)
+    log_file = os.environ.get("DUB_ASR_LOG_FILE")
+    if not log_file:
+        return
+    try:
+        with Path(log_file).open("a", encoding="utf-8") as fh:
+            fh.write(message + "\n")
+    except OSError:
+        pass
 
 
 def _normalize_audio_for_vad(audio_path: Path) -> Path | None:
@@ -69,6 +83,9 @@ def segment_by_vad(
     audio_path: Path,
     transcription_text: str,
     config: SubtitleConfig,
+    backend_name: str = "mlx",
+    language: str | None = None,
+    prompt: str | None = None,
 ) -> list[Segment]:
     """Detect speech segments via Silero VAD and transcribe each segment.
 
@@ -82,8 +99,8 @@ def segment_by_vad(
         List of Segment objects with real start/end timestamps and transcribed text.
     """
     try:
-        from silero_vad import get_speech_timestamps, read_audio, load_silero_vad  # noqa: F401
         import torch  # noqa: F401
+        from silero_vad import get_speech_timestamps, load_silero_vad, read_audio  # noqa: F401
     except Exception as exc:  # pragma: no cover
         raise ASRProcessingError(
             f"silero-vad and torch/torchaudio are required for subtitle output. "
@@ -111,32 +128,53 @@ def segment_by_vad(
             min_speech_duration_ms=int(config.min_segment_duration * 1000),
             min_silence_duration_ms=int(config.min_segment_duration * 1000 / 2),
         )
+        _emit_progress(f"asr: VAD found {len(speech_timestamps)} speech segments")
 
         if not speech_timestamps:
             return []
 
-        # Build audio chunks and run per-segment MLX transcription
-        backend = BackendRegistry().create("mlx")
+        # Build audio chunks and run per-segment transcription
+        backend = BackendRegistry().create(backend_name)
         segments: list[Segment] = []
+        total_segments = len(speech_timestamps)
 
-        for ts in speech_timestamps:
+        for idx, ts in enumerate(speech_timestamps, start=1):
             start_s = ts["start"] / 16000.0
             end_s = ts["end"] / 16000.0
             duration = end_s - start_s
+            if idx == 1 or idx == total_segments or idx % 10 == 0:
+                _emit_progress(
+                    f"asr: transcribing segment {idx}/{total_segments} ({start_s:.2f}s-{end_s:.2f}s)"
+                )
 
             # Split overly long segments further
             if duration > config.max_segment_duration:
+                _emit_progress(
+                    f"asr: splitting long segment {idx}/{total_segments} ({duration:.2f}s)"
+                )
                 sub_segments = _split_long_segment(
-                    audio_for_vad_path, start_s, end_s, backend, config
+                    audio_for_vad_path,
+                    start_s,
+                    end_s,
+                    backend,
+                    config,
+                    language=language,
+                    prompt=prompt,
                 )
                 segments.extend(sub_segments)
             else:
                 sub_seg = _transcribe_segment(
-                    audio_for_vad_path, start_s, end_s, backend
+                    audio_for_vad_path,
+                    start_s,
+                    end_s,
+                    backend,
+                    language=language,
+                    prompt=prompt,
                 )
                 if sub_seg is not None:
                     segments.append(sub_seg)
 
+        _emit_progress(f"asr: VAD transcription completed ({len(segments)} subtitle segments)")
         return segments
 
     finally:
@@ -149,6 +187,8 @@ def _transcribe_segment(
     start_s: float,
     end_s: float,
     backend,
+    language: str | None = None,
+    prompt: str | None = None,
 ) -> Segment | None:
     """Extract audio slice [start_s, end_s] and transcribe it with MLX."""
     try:
@@ -171,7 +211,12 @@ def _transcribe_segment(
 
         try:
             from qwenasr_mlx_cli.core.types import TranscriptionRequest
-            request = TranscriptionRequest(input_path=tmp_path, output_format="txt")
+            request = TranscriptionRequest(
+                input_path=tmp_path,
+                output_format="txt",
+                language=language,
+                prompt=prompt,
+            )
             result = backend.transcribe(request)
             text = result.text.strip()
             if not text:
@@ -190,13 +235,22 @@ def _split_long_segment(
     end_s: float,
     backend,
     config: SubtitleConfig,
+    language: str | None = None,
+    prompt: str | None = None,
 ) -> list[Segment]:
     """Split a long segment into sub-segments of max_segment_duration."""
     segments: list[Segment] = []
     cursor = start_s
     while cursor < end_s:
         sub_end = min(cursor + config.max_segment_duration, end_s)
-        sub_seg = _transcribe_segment(audio_path, cursor, sub_end, backend)
+        sub_seg = _transcribe_segment(
+            audio_path,
+            cursor,
+            sub_end,
+            backend,
+            language=language,
+            prompt=prompt,
+        )
         if sub_seg is not None:
             segments.append(sub_seg)
         cursor = sub_end

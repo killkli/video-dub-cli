@@ -32,15 +32,11 @@ Pinned behaviours:
 """
 from __future__ import annotations
 
-import importlib
-import io
 import inspect
+import io
 import re
-import subprocess
-import sys
 from contextlib import redirect_stdout
 from pathlib import Path
-
 
 # ---------------------------------------------------------------------------
 # 1. Stage module imports the vendored package directly
@@ -56,8 +52,8 @@ def test_asr_stage_module_imports_vendored_qwenasr_mlx_cli() -> None:
     re-introduces a subprocess call to an external binary would
     drop these imports, so this test is the regression guard.
     """
-    from dub.stages import asr as asr_module
     import qwenasr_mlx_cli
+    from dub.stages import asr as asr_module
 
     src_file = inspect.getsourcefile(asr_module)
     assert src_file is not None
@@ -153,12 +149,71 @@ def test_vendored_run_transcription_signature_matches_stage_call() -> None:
         )
 
 
+def test_vendored_run_transcription_uses_vad_segments_without_full_file_prepass(monkeypatch) -> None:
+    """When VAD returns subtitle segments, the subtitle path must render them
+    directly without first running a whole-file transcription."""
+    import qwenasr_mlx_cli.pipelines.transcribe as transcribe_mod
+    from qwenasr_mlx_cli.core.types import (
+        Segment,
+        SubtitleConfig,
+        TranscriptionRequest,
+        TranscriptionResult,
+    )
+
+    seen: dict[str, object] = {}
+
+    class FakeBackend:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def transcribe(self, request: TranscriptionRequest) -> TranscriptionResult:
+            self.calls += 1
+            return TranscriptionResult(
+                text="full pass should not run",
+                output_format=request.output_format,
+                backend_name="mlx",
+                segments=[],
+                metadata={"duration": 30.0},
+            )
+
+    backend = FakeBackend()
+
+    def fake_segment_by_vad(audio_path, transcription_text, config, **kwargs):
+        seen["audio_path"] = audio_path
+        seen["transcription_text"] = transcription_text
+        seen.update(kwargs)
+        return [Segment(start=0.0, end=1.5, text="Hello there")]
+
+    monkeypatch.setattr(transcribe_mod, "validate_media_input", lambda p: p)
+    monkeypatch.setattr(transcribe_mod.BackendRegistry, "create", lambda self, name: backend)
+    monkeypatch.setattr(transcribe_mod, "segment_by_vad", fake_segment_by_vad)
+
+    rendered = transcribe_mod.run_transcription(
+        input_path=Path("/tmp/fake.mp4"),
+        backend_name="mlx",
+        output_format="srt",
+        language="ja",
+        prompt="radio chatter",
+        subtitle_config=SubtitleConfig(output_format="srt"),
+        convert_simplified_to_traditional=False,
+    )
+
+    assert backend.calls == 0
+    assert seen["audio_path"] == Path("/tmp/fake.mp4")
+    assert seen["transcription_text"] == ""
+    assert seen["backend_name"] == "mlx"
+    assert seen["language"] == "ja"
+    assert seen["prompt"] == "radio chatter"
+    assert "00:00:00,000 --> 00:00:01,500" in rendered
+    assert "Hello there" in rendered
+
+
 def test_vendored_run_transcription_falls_back_to_single_cue_when_vad_finds_no_segments(monkeypatch) -> None:
     """If full-text ASR succeeds but VAD yields no subtitle segments, subtitle
     output must still be non-empty. The fallback contract is a single cue that
     spans the backend-reported duration."""
-    from qwenasr_mlx_cli.core.types import SubtitleConfig, TranscriptionRequest, TranscriptionResult
     import qwenasr_mlx_cli.pipelines.transcribe as transcribe_mod
+    from qwenasr_mlx_cli.core.types import SubtitleConfig, TranscriptionRequest, TranscriptionResult
 
     class FakeBackend:
         def transcribe(self, request: TranscriptionRequest) -> TranscriptionResult:
@@ -172,7 +227,11 @@ def test_vendored_run_transcription_falls_back_to_single_cue_when_vad_finds_no_s
 
     monkeypatch.setattr(transcribe_mod, "validate_media_input", lambda p: p)
     monkeypatch.setattr(transcribe_mod.BackendRegistry, "create", lambda self, name: FakeBackend())
-    monkeypatch.setattr(transcribe_mod, "segment_by_vad", lambda audio_path, transcription_text, config: [])
+    monkeypatch.setattr(
+        transcribe_mod,
+        "segment_by_vad",
+        lambda audio_path, transcription_text, config, **kwargs: [],
+    )
 
     rendered = transcribe_mod.run_transcription(
         input_path=Path("/tmp/fake.mp4"),
@@ -238,7 +297,6 @@ def test_no_runtime_code_reads_qwenasr_cli_field() -> None:
     The config definition and its docstring are the only places
     this string is allowed to appear.
     """
-    import re
     from pathlib import Path
 
     src_root = Path(__file__).resolve().parents[1] / "src" / "dub"
@@ -349,9 +407,9 @@ def test_qwenasr_mlx_cli_is_a_real_python_package() -> None:
     pins the layout.
     """
     import qwenasr_mlx_cli
-    import qwenasr_mlx_cli.pipelines.transcribe
-    import qwenasr_mlx_cli.core.types
     import qwenasr_mlx_cli.core.exceptions
+    import qwenasr_mlx_cli.core.types
+    import qwenasr_mlx_cli.pipelines.transcribe
 
     # The package exposes the version sentinel used in pyproject.
     assert hasattr(qwenasr_mlx_cli, "__version__")
