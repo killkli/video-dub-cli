@@ -253,9 +253,10 @@ def test_dub_doctor_reports_omnivoice_opencc_gate(runner, tmp_path, monkeypatch)
 
     result = runner.invoke(main, ["doctor", "--config", str(cfg)])
 
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 1, result.output
     assert "deps:opencc:" in result.output
     assert "omnivoice: READY" in result.output
+    assert "doctor lanes: ready=`dub en2zh` ; blocked=`dub ja2zh`" in result.output
 
 
 def test_auto_recover_missing_secrets_reads_zshrc(monkeypatch, tmp_path):
