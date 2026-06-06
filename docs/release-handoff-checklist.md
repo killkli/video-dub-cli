@@ -4,9 +4,9 @@
 
 ## 1. Repo / Branch 狀態
 
-- [ ] 目前工作 branch：`feature/standalone-repo-uv`
-- [ ] `git status --short` 為乾淨狀態
-- [ ] README 與 docs 沒有引用不存在的檔案或舊路徑
+- [ ] 目前交接基線已回到 `main`（若在其他 branch，需在交接摘要中明寫原因）
+- [ ] `git status --short` 為乾淨狀態，或僅保留交接方明確知道用途的 local supplement 文件
+- [ ] README 與 docs 沒有引用不存在的檔案、舊 branch 名稱或舊路徑
 
 ## 2. CLI Surface（Phase 1 + AUTO-S1 完成的項目）
 
@@ -58,8 +58,8 @@ export GOOGLE_API_KEY=your_key
 uv run dub doctor
 
 # targeted tests
-pytest tests/test_cli.py -q        # 35/35 pass (AUTO-S1 added 2)
-pytest tests/integration/test_6e_route_scenarios.py -q
+uv run pytest tests/test_cli.py -q
+uv run pytest tests/integration/test_6e_route_scenarios.py -q
 ```
 
 若有實際片源：

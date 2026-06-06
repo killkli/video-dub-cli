@@ -68,8 +68,8 @@ uv run dub validate --project-dir /path/to/project
 
 - `ffmpeg` / `ffprobe`
 - Gemini API key
-- VoxCPM 路線：`ja2zh` 現在使用 repo 內打包版 server entrypoint；`~/.config/dub/config.yaml` 應將 `paths.voxcpme_python` 指到 `/Users/johnchen/.hermes/projects/video-dub-cli/.venvs/voxcpm/bin/python`
-- 若 `dub doctor` 顯示 `service` 缺失，請在 repo 內啟動本機 VoxCPM 服務：`cd /Users/johnchen/.hermes/projects/video-dub-cli && PYTHONPATH=/Users/johnchen/.hermes/projects/video-dub-cli/src .venvs/voxcpm/bin/python src/dub/tts_engines/voxcpme/server.py --port 8808`
+- VoxCPM 路線：先執行 `uv run dub bootstrap-voxcpm` 建立 / 更新專用 interpreter，再用 `uv run dub doctor` 確認 `ja2zh` lane readiness
+- 若 `dub doctor` 顯示 `voxcpme service` 缺失，請依 `docs/operator-runbook.md` 啟動本機 VoxCPM 服務；若你接手的是**這台已配置好的本機**，可直接看 `docs/local-operator-handoff-2026-06-05.md`
 - OmniVoice（若要使用；由 `dub bootstrap-omnivoice` 自動建立專用環境）
 
 ---
@@ -279,6 +279,7 @@ uv run dub doctor --config ~/.config/dub/config.yaml
 
 - `QUICKSTART.md`：5 分鐘上手
 - `docs/operator-runbook.md`：故障排除與恢復流程
+- `docs/local-operator-handoff-2026-06-05.md`：**本機接手補充說明**（只適用於目前已配置好的這台機器）
 - `docs/qa-auto-workflow-acceptance-criteria-2026-06-04.md`：auto-workflow 驗收標準（T2 QA 定義）
 - `docs/auto-workflow-contract-2026-06-04.md`：operator 合約（T0 gate）
 - `docs/operator-qa-real-backend-en2zh-2026-06-03.md`：英文→中文真實驗證

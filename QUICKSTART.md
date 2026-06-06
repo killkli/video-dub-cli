@@ -99,7 +99,7 @@ uv run dub auto anime.mp4 --source-lang ja    # 明確指定日文→中文
 
 ```bash
 uv run dub en2zh talk.mp4    # 英文→中文
-uv run dub ja2zh anime.mp4   # 日文→中文（先確認 ~/.config/dub/config.yaml 的 paths.voxcpme_python 指向 /Users/johnchen/.hermes/projects/video-dub-cli/.venvs/voxcpm/bin/python，且 repo 內 VoxCPM server 已在 127.0.0.1:8808 啟動）
+uv run dub ja2zh anime.mp4   # 日文→中文（先跑 `uv run dub bootstrap-voxcpm`，再用 `uv run dub doctor` 確認 ja2zh lane 就緒）
 ```
 
 別名內部與 `dub auto` 共用同一套 staged pipeline 合約，只是語言方向已寫死。
@@ -214,3 +214,4 @@ uv run dub doctor --config ~/.config/dub/config.yaml
 ```
 
 完整故障排除請看 `docs/operator-runbook.md`。
+若你接手的是這台已配置完成的本機，另看 `docs/local-operator-handoff-2026-06-05.md`。
