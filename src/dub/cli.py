@@ -1436,7 +1436,7 @@ def _remediation_hint(
             return (
                 "fix: start the local VoxCPM server with "
                 "`uv run python -m dub.tts_engines.voxcpme.server --port 8808` "
-                "(see docs/operator-runbook.md FR-9)"
+                "(see docs/operator-runbook.md FR-10)"
             )
         return f"fix: start the {backend_name or '<backend>'} backend service, then re-run `dub doctor`"
     if check_name == "config":
