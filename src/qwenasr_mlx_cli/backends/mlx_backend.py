@@ -88,13 +88,19 @@ class MLXBackend:
         """Return path to a 16 kHz mono WAV file, converting if needed via pydub."""
         suffix = input_path.suffix.lower()
         if suffix == ".wav":
-            return str(input_path)
-        # Convert non-WAV to a temp WAV using pydub (ffmpeg backend)
+            try:
+                import wave
+
+                with wave.open(str(input_path), "rb") as wav_file:
+                    if wav_file.getframerate() == 16000 and wav_file.getnchannels() == 1:
+                        return str(input_path)
+            except Exception:
+                pass
         try:
             import pydub
         except ImportError as exc:
             raise ASRProcessingError(
-                "pydub is required for non-WAV files. Install with `pip install pydub`."
+                "pydub is required to normalize ASR audio inputs. Install with `pip install pydub`."
             ) from exc
         audio = pydub.AudioSegment.from_file(str(input_path))
         audio = audio.set_frame_rate(16000).set_channels(1)

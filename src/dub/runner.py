@@ -7,18 +7,18 @@ from pathlib import Path
 
 from loguru import logger
 
+from dub import state as state_module
 from dub.config import DubConfig
 from dub.stages import (
-    StemsStage,
     AsrStage,
+    AssembleStage,
     RefAudioStage,
+    StemsStage,
     TranslateStage,
     TtsStage,
-    AssembleStage,
 )
 from dub.stages.base import Stage
-from dub import state as state_module
-from dub.state import ProjectState, StageState, now_iso
+from dub.state import StageState, now_iso
 
 
 def _artifacts_intact(project_dir: Path, stage_state: StageState) -> bool:
@@ -61,9 +61,15 @@ def run_pipeline(
         log = logger.bind(stage=stage.name)
         stage_state = s.stages[stage.name]
 
-        can_skip = stage.is_done(project_dir)
-        if can_skip and stage_state.status in {"done", "skipped"} and stage_state.artifacts:
-            can_skip = _artifacts_intact(project_dir, stage_state)
+        can_skip = False
+        if (
+            stage_state.status in {"done", "skipped"}
+            and not stage_state.error
+            and stage.is_done(project_dir)
+        ):
+            can_skip = True
+            if stage_state.artifacts:
+                can_skip = _artifacts_intact(project_dir, stage_state)
 
         if can_skip:
             stage_state.status = "skipped"

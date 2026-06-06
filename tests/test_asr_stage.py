@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import wave
 from types import SimpleNamespace
 
 from dub.config import DubConfig
@@ -8,7 +9,7 @@ from dub.stages.base import ASRStage
 from qwenasr_mlx_cli.backends.mlx_backend import _REQUIRED_SNAPSHOT_FILES, MLXBackend
 
 
-def test_asr_stage_prefers_vocals_stem_and_writes_srt(tmp_path, monkeypatch):
+def test_asr_stage_prefers_raw_video_and_writes_srt(tmp_path, monkeypatch):
     project_dir = tmp_path / "proj"
     (project_dir / "01_raw_video").mkdir(parents=True)
     (project_dir / "02_stems").mkdir(parents=True)
@@ -27,18 +28,18 @@ def test_asr_stage_prefers_vocals_stem_and_writes_srt(tmp_path, monkeypatch):
     state = ASRStage().run(project_dir, cfg)
 
     assert state.status == "done"
-    assert seen["input_path"] == project_dir / "02_stems" / "video.mp4.vocals.wav"
+    assert seen["input_path"] == project_dir / "01_raw_video" / "video.mp4"
     assert seen["backend_name"] == "mlx"
     assert seen["output_format"] == "srt"
     assert (project_dir / "03_asr" / "video.srt").read_text(encoding="utf-8").strip().startswith("1")
     assert "input=" in (project_dir / ".dub" / "02_asr.log").read_text(encoding="utf-8")
 
 
-def test_asr_stage_falls_back_to_raw_video_when_vocals_stem_missing(tmp_path, monkeypatch):
+def test_asr_stage_falls_back_to_vocals_stem_when_raw_video_missing(tmp_path, monkeypatch):
     project_dir = tmp_path / "proj"
-    (project_dir / "01_raw_video").mkdir(parents=True)
+    (project_dir / "02_stems").mkdir(parents=True)
     (project_dir / ".dub").mkdir(parents=True)
-    (project_dir / "01_raw_video" / "video.mp4").write_bytes(b"fake")
+    (project_dir / "02_stems" / "video.mp4.vocals.wav").write_bytes(b"wav")
 
     seen = {}
 
@@ -51,7 +52,7 @@ def test_asr_stage_falls_back_to_raw_video_when_vocals_stem_missing(tmp_path, mo
     state = ASRStage().run(project_dir, DubConfig())
 
     assert state.status == "done"
-    assert seen["input_path"] == project_dir / "01_raw_video" / "video.mp4"
+    assert seen["input_path"] == project_dir / "02_stems" / "video.mp4.vocals.wav"
 
 
 def test_asr_stage_fails_when_repo_pipeline_raises(tmp_path, monkeypatch):
@@ -153,6 +154,36 @@ def test_asr_stage_test_mode_backend_fail_short_circuits(tmp_path, monkeypatch):
     assert state.status == "failed"
     assert state.error is not None
     assert "test-mode forced backend failure" in state.error
+
+
+def test_mlx_backend_keeps_already_normalized_wav(tmp_path):
+    wav_path = tmp_path / "mono16k.wav"
+    with wave.open(str(wav_path), "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(16000)
+        wav_file.writeframes(b"\x00\x00" * 160)
+
+    backend = MLXBackend()
+
+    assert backend._load_audio(wav_path) == str(wav_path)
+
+
+def test_mlx_backend_normalizes_non_16k_stereo_wav(tmp_path):
+    wav_path = tmp_path / "stereo44k.wav"
+    with wave.open(str(wav_path), "wb") as wav_file:
+        wav_file.setnchannels(2)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(44100)
+        wav_file.writeframes(b"\x00\x00\x00\x00" * 160)
+
+    backend = MLXBackend()
+    normalized = backend._load_audio(wav_path)
+
+    assert normalized != str(wav_path)
+    with wave.open(normalized, "rb") as wav_file:
+        assert wav_file.getnchannels() == 1
+        assert wav_file.getframerate() == 16000
 
 
 def test_mlx_backend_prefers_complete_cached_snapshot(tmp_path, monkeypatch):

@@ -41,10 +41,11 @@ _TEST_FAIL_ENV = "DUB_ASR_TEST_BACKEND_FAIL"
 
 
 def _resolve_asr_input(project_dir: Path) -> Path:
+    raw_video = project_dir / "01_raw_video" / "video.mp4"
+    if raw_video.is_file():
+        return raw_video
     vocals = project_dir / "02_stems" / "video.mp4.vocals.wav"
-    if vocals.is_file():
-        return vocals
-    return project_dir / "01_raw_video" / "video.mp4"
+    return vocals
 
 
 def _resolve_test_fixture_srt(config: DubConfig) -> str | None:
