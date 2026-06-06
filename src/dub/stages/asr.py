@@ -26,15 +26,25 @@ import os
 from pathlib import Path
 
 from dub.config import DubConfig
-from dub.state import now_iso
 from dub.stages.base import Stage, StageState
-from qwenasr_mlx_cli.core.exceptions import ASRProcessingError, BackendUnavailableError, InputValidationError
+from dub.state import now_iso
+from qwenasr_mlx_cli.core.exceptions import (
+    ASRProcessingError,
+    BackendUnavailableError,
+    InputValidationError,
+)
 from qwenasr_mlx_cli.core.types import SubtitleConfig
 from qwenasr_mlx_cli.pipelines.transcribe import run_transcription
 
-
 _TEST_FIXTURE_ENV = "DUB_ASR_TEST_FIXTURE_SRT"
 _TEST_FAIL_ENV = "DUB_ASR_TEST_BACKEND_FAIL"
+
+
+def _resolve_asr_input(project_dir: Path) -> Path:
+    vocals = project_dir / "02_stems" / "video.mp4.vocals.wav"
+    if vocals.is_file():
+        return vocals
+    return project_dir / "01_raw_video" / "video.mp4"
 
 
 def _resolve_test_fixture_srt(config: DubConfig) -> str | None:
@@ -67,7 +77,7 @@ class AsrStage(Stage):
         state = StageState(name=self.name, status="running", started_at=now_iso())
         state.attempts = 1
 
-        input_video = project_dir / "01_raw_video" / "video.mp4"
+        input_media = _resolve_asr_input(project_dir)
         srt_out = project_dir / "03_asr" / "video.srt"
         log_file = project_dir / ".dub" / f"{self.name}.log"
 
@@ -110,9 +120,10 @@ class AsrStage(Stage):
 
         # --- real repo-owned ASR pipeline ---
         subtitle_config = SubtitleConfig(output_format="srt")
+        log_file.write_text(f"input={input_media}\nstatus=starting\n", encoding="utf-8")
         try:
             rendered = run_transcription(
-                input_path=input_video,
+                input_path=input_media,
                 backend_name="mlx",
                 output_format="srt",
                 language=config.defaults.source_lang or None,
@@ -121,20 +132,20 @@ class AsrStage(Stage):
                 convert_simplified_to_traditional=False,
             )
         except (BackendUnavailableError, InputValidationError, ASRProcessingError, NotImplementedError) as exc:
-            log_file.write_text(f"ERROR: {exc}\n", encoding="utf-8")
+            log_file.write_text(f"input={input_media}\nERROR: {exc}\n", encoding="utf-8")
             state.status = "failed"
             state.finished_at = now_iso()
             state.error = f"repo ASR pipeline failed: {exc}; see {log_file}"
             return state
         except Exception as exc:
-            log_file.write_text(f"UNEXPECTED ERROR: {exc}\n", encoding="utf-8")
+            log_file.write_text(f"input={input_media}\nUNEXPECTED ERROR: {exc}\n", encoding="utf-8")
             state.status = "failed"
             state.finished_at = now_iso()
             state.error = f"repo ASR pipeline failed: {exc}; see {log_file}"
             return state
 
         srt_out.write_text(rendered, encoding="utf-8")
-        log_file.write_text("repo ASR pipeline completed\n", encoding="utf-8")
+        log_file.write_text(f"input={input_media}\nrepo ASR pipeline completed\n", encoding="utf-8")
 
         if not srt_out.exists() or not srt_out.read_text(encoding="utf-8").strip():
             state.status = "failed"

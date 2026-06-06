@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import sys
 import tempfile
 from pathlib import Path
 
@@ -8,6 +10,20 @@ from qwenasr_mlx_cli.core.exceptions import (
     BackendUnavailableError,
 )
 from qwenasr_mlx_cli.core.types import TranscriptionRequest, TranscriptionResult
+
+_REQUIRED_SNAPSHOT_FILES = {
+    ".gitattributes",
+    "README.md",
+    "chat_template.json",
+    "config.json",
+    "generation_config.json",
+    "merges.txt",
+    "model.safetensors",
+    "model.safetensors.index.json",
+    "preprocessor_config.json",
+    "tokenizer_config.json",
+    "vocab.json",
+}
 
 
 class MLXBackend:
@@ -26,7 +42,23 @@ class MLXBackend:
     def available(self) -> bool:
         return self._import_error is None
 
-    def _ensure_model(self) -> "Qwen3ASR":
+    def _cached_snapshot_path(self) -> Path | None:
+        cache_root = Path(os.environ.get("HF_HOME", str(Path.home() / ".cache" / "huggingface")))
+        model_cache = cache_root / "hub" / f"models--{self._model_id.replace('/', '--')}"
+        blobs_dir = model_cache / "blobs"
+        if blobs_dir.exists() and any(blobs_dir.glob("*.incomplete")):
+            return None
+        snapshots_dir = model_cache / "snapshots"
+        if not snapshots_dir.exists():
+            return None
+        for snapshot in snapshots_dir.iterdir():
+            if not snapshot.is_dir():
+                continue
+            if _REQUIRED_SNAPSHOT_FILES.issubset({p.name for p in snapshot.iterdir()}):
+                return snapshot
+        return None
+
+    def _ensure_model(self) -> object:
         """Lazily load and warm up the MLX model."""
         if self._model is not None:
             return self._model  # type: ignore[return-value]
@@ -37,9 +69,16 @@ class MLXBackend:
         try:
             from qwen3_asr_mlx import Qwen3ASR
 
-            self._model = Qwen3ASR.from_pretrained(self._model_id)
+            model_source = self._cached_snapshot_path()
+            if model_source is not None:
+                print(f"asr: loading cached model snapshot {model_source}", file=sys.stderr, flush=True)
+            else:
+                print(f"asr: resolving model {self._model_id} from Hugging Face Hub", file=sys.stderr, flush=True)
+            self._model = Qwen3ASR.from_pretrained(str(model_source) if model_source else self._model_id)
             if not MLXBackend._warmmed_up:
+                print("asr: warming up model (first process may take about 1-2 minutes)", file=sys.stderr, flush=True)
                 self._model.warm_up()
+                print("asr: model warm-up complete", file=sys.stderr, flush=True)
                 MLXBackend._warmmed_up = True
             return self._model  # type: ignore[return-value]
         except Exception as exc:
