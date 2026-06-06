@@ -5,6 +5,26 @@ from pathlib import Path
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _stub_translation_api_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Inject fake GOOGLE_API_KEY / GEMINI_API_KEY for every integration test.
+
+    The integration config in ``fake_qwenasr_config`` sets
+    ``translation.provider: mock`` but does not override
+    ``translation.mode`` (default ``"delegate"``). The preflight gate
+    therefore still asks for the Gemini API key env var. Without this
+    stub the integration cluster only passes on shells that happen to
+    have a real key exported — which makes the harness non-hermetic
+    and caused the P2-C regression.
+
+    Pattern matches the unit suite in tests/test_cli.py, which uses
+    ``monkeypatch.setenv("GOOGLE_API_KEY", "fake-key")`` on every
+    delegate-mode test.
+    """
+    monkeypatch.setenv("GOOGLE_API_KEY", "integration-test-fake")
+    monkeypatch.setenv("GEMINI_API_KEY", "integration-test-fake")
+
+
 @pytest.fixture
 def fake_qwenasr_config(tmp_path: Path) -> Path:
     skills_dir = tmp_path / "fake-skills"
