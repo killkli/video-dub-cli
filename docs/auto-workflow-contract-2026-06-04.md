@@ -1,5 +1,10 @@
 # Auto-Workflow Board Contract (T0 Gate, 2026-06-04)
 
+> **Historical planning contract.** This file records the board contract for the 2026-06-04 implementation wave.
+> Branch names, task references, and delivery framing below are preserved as planning history.
+> Use it as background on why the auto-workflow was shaped this way, not as the sole current operator source of truth.
+
+
 ## Goal
 
 Establish the operator contract for the next wave of `video-dub-cli`: a single

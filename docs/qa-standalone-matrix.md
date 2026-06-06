@@ -1,5 +1,9 @@
 # Standalone Install / Usage Matrix — T6 QA
 
+> **Historical snapshot only.** This document captures a 2026-06-03 QA pass on the old `feature/standalone-repo-uv` wave.
+> Branch names, command outputs, test counts, and specific PASS/FAIL rows below are preserved as audit evidence, **not** the current release baseline.
+> For current operator truth, prefer `README.md`, `QUICKSTART.md`, `docs/operator-runbook.md`, and `docs/release-handoff-checklist.md`.
+>
 > Verifies the `feature/standalone-repo-uv` contract as if I were a
 > fresh operator. Date: 2026-06-03. Branch: `feature/standalone-repo-uv`.
 > Working tree: `/Users/johnchen/.hermes/projects/video-dub-cli`.

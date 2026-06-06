@@ -1,8 +1,13 @@
 # Standalone Dependency Map
 
-> Canonical inventory of every runtime dependency `video-dub-cli` carries
+> **Historical dependency audit.** This document captures the 2026-06-03 standalone-repo migration analysis.
+> Some findings below were correct at the time but have since been implemented, superseded, or retired.
+> Keep it as audit history; do **not** treat every hotspot below as current runtime truth.
+> For current operator truth, prefer `README.md`, `QUICKSTART.md`, `docs/operator-runbook.md`, and current tests / CLI output.
+>
+> Canonical inventory of every runtime dependency `video-dub-cli` carried
 > on external repos, Hermes skills, `~/.hermes` paths, external Python
-> interpreters, and non-Python system tools. Each hotspot is grounded
+> interpreters, and non-Python system tools during that audit wave. Each hotspot is grounded
 > in the actual source (not memory) and paired with a proposed target
 > ownership and a migration note. Verification date: 2026-06-03.
 

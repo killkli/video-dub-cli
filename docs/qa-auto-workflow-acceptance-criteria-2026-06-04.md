@@ -1,6 +1,9 @@
 # QA Acceptance Criteria for Auto-Workflow (T2, 2026-06-04)
 
-**Branch:** `feature/standalone-repo-uv`
+> **Historical QA definition.** This file preserves the acceptance criteria used for the 2026-06-04 auto-workflow implementation wave.
+> The branch / task framing below is historical context, not the current release baseline.
+
+**Branch at that time:** `feature/standalone-repo-uv`
 **Parent contract:** `docs/auto-workflow-contract-2026-06-04.md`
 **Sibling audit (T1):** `docs/cli-one-shot-gap-analysis-2026-06-04.md`
 **Status:** criteria defined, ready for T3 implementation

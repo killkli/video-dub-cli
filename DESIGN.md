@@ -1,6 +1,10 @@
 # video-dub-cli Design Specification
 
-> Current implemented contract: installable `dub` CLI with `run/resume/status/clean/validate`, Pydantic-based config/state models, 6-stage resumable pipeline runner, and stub stage implementations that create deterministic test artifacts. Real external tool wiring (qwenasr / translation / OmniVoice / remix scripts) is intentionally deferred to the next phase.
+> **Historical design snapshot.** This file reflects an early repo phase before the current auto-workflow / real-backend productization waves landed.
+> It is preserved for design history, **not** as the current operator or architecture source of truth.
+> For current behavior, prefer `README.md`, `QUICKSTART.md`, `docs/operator-runbook.md`, and the current CLI/test surface.
+>
+> Historical contract captured here: installable `dub` CLI with `run/resume/status/clean/validate`, Pydantic-based config/state models, 6-stage resumable pipeline runner, and stub stage implementations that create deterministic test artifacts. Real external tool wiring (qwenasr / translation / OmniVoice / remix scripts) was intentionally deferred at that time.
 
 ## 1. Overview
 

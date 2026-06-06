@@ -1,7 +1,10 @@
 # Canonical Operator QA — Supported Single-Command Flow
 
+> **Historical QA snapshot.** This file records a 2026-06-03 operator QA pass during the standalone feature-branch wave.
+> Keep it as evidence of what was verified then; do not read its branch/runtime checkpoint lines as the current repo state.
+
 **Date:** 2026-06-03  
-**Branch:** `feature/standalone-repo-uv`  
+**Branch at that time:** `feature/standalone-repo-uv`  
 **Runtime checkpoint:** after `2a6bc06 feat(cli): tighten preflight and completion UX`
 
 ## Goal / supported scenario

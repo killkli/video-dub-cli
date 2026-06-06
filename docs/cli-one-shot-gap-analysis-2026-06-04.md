@@ -1,5 +1,8 @@
 # CLI one-shot gap analysis (T1 audit, 2026-06-04)
 
+> **Historical gap audit.** This document captures what was still missing during the 2026-06-04 feature-wave audit.
+> Items below may already be fixed; treat this file as audit history, not as the current defect list.
+
 ## Scope
 
 Audit the current `dub` CLI against the desired one-shot operator workflow for the standalone repo contract.
