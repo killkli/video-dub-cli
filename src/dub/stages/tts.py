@@ -285,13 +285,17 @@ class TtsStage(Stage):
             zh_srt, asr_srt, src_flag, ref_dir, tts_dir, project_dir,
         )
         rc = self._run_subprocess(cmd, log_file)
-        if rc != 0:
-            state.status = "failed"
-            state.finished_at = now_iso()
-            state.error = (
-                f"{backend_name}:{script.name} exited with code {rc}; see {log_file}"
-            )
-            return state
+        # The script's exit code is ADVISORY, not authoritative. The
+        # OmniVoice / VoxCPM scripts both ``sys.exit(1)`` whenever their
+        # own tally reports ``fail > 0 or empty > 0`` — but a single
+        # partial-write failure on a 32-cue run still leaves 31 valid
+        # wavs on disk and the verifier (which is what downstream stages
+        # care about) sees the run as effectively done. We therefore
+        # only surface the exit code as a failure AFTER the post-flight
+        # check + per-line recovery have had a chance to fill in any
+        # genuinely missing cues. See the regression test
+        # ``test_tts_stage_accepts_run_when_subprocess_reports_failure_but_artifacts_complete``
+        # for the exact scenario this guards against.
 
         # Post-flight stabilization window. The script may exit 0 slightly
         # before all artifacts are durably visible on disk, and the script's
@@ -322,9 +326,16 @@ class TtsStage(Stage):
         if missing:
             state.status = "failed"
             state.finished_at = now_iso()
+            # Surface the script's exit code when it was non-zero — even
+            # though we no longer short-circuit on it, knowing whether
+            # the script crashed (rc=1) or whether the recovery pass
+            # is what failed to materialize the missing cues (rc=0 on
+            # the initial run, rc!=0 on the recovery calls) is useful
+            # for the operator triaging the log.
+            rc_hint = f" (script exited {rc})" if rc != 0 else ""
             state.error = (
                 f"{backend_name}:{script.name} produced {len(produced)}/{expected} tts wavs; "
-                f"missing or too small: {', '.join(missing)}; see {log_file}"
+                f"missing or too small: {', '.join(missing)}; see {log_file}{rc_hint}"
             )
             return state
 
